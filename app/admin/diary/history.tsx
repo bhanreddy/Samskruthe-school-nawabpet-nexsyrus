@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 import { useTheme } from '../../../src/hooks/useTheme';
 import AdminHeader from '../../../src/components/AdminHeader';
 import LogoLoader from '../../../src/components/LogoLoader';
@@ -16,14 +17,20 @@ import { ClassService, ClassInfo, Section } from '../../../src/services/classSer
 import { api } from '../../../src/services/apiClient';
 import { alertCompat } from '../../../src/utils/crossPlatformAlert';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
+import { DiaryPhotoStrip, diaryPhotoUrls, diarySourceLabel, isPhotoOnlyDiary } from '../../../src/components/diary/DiaryPhotoStrip';
 
 interface DiaryEntry {
   id: string;
   entry_date: string;
+  title?: string | null;
   content: string;
   created_at: string;
-  subject_name: string;
-  teacher_name: string;
+  subject_name?: string | null;
+  teacher_name?: string | null;
+  class_name?: string | null;
+  section_name?: string | null;
+  attachments?: unknown;
+  entry_source?: string | null;
 }
 
 export default function AdminDiaryHistoryScreen() {
@@ -68,7 +75,7 @@ export default function AdminDiaryHistoryScreen() {
     loadMetadata();
   }, []);
 
-  const fetchHistory = async () => {
+  const fetchHistory = useCallback(async () => {
     setLoading(true);
     try {
       const params: any = { date: selectedDate };
@@ -83,11 +90,13 @@ export default function AdminDiaryHistoryScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
-
-  useEffect(() => {
-    fetchHistory();
   }, [selectedClass, selectedSection, selectedDate]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void fetchHistory();
+    }, [fetchHistory]),
+  );
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -190,6 +199,10 @@ export default function AdminDiaryHistoryScreen() {
         ) : (
           entries.map((entry, index) => {
             const timeStr = new Date(entry.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const photos = diaryPhotoUrls(entry.attachments);
+            const photoOnly = isPhotoOnlyDiary(entry.content, entry.attachments);
+            const sourceLabel = diarySourceLabel(entry.entry_source, photos.length > 0);
+            const classLabel = entry.class_name ? `${entry.class_name}${entry.section_name || ''}` : null;
             return (
               <Animated.View
                 key={entry.id}
@@ -199,17 +212,25 @@ export default function AdminDiaryHistoryScreen() {
                 <View style={styles.cardHeader}>
                   <View style={styles.teacherInfo}>
                     <View style={styles.avatar}>
-                      <Ionicons name="person-outline" size={16} color="#FFF" />
+                      <Ionicons name={photos.length ? 'camera-outline' : 'person-outline'} size={16} color="#FFF" />
                     </View>
-                    <View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
                       <Text style={[styles.teacherName, { color: titleColor }]}>{entry.teacher_name || 'Teacher'}</Text>
-                      <Text style={[styles.subjectName, { color: subColor }]}>{entry.subject_name || 'General'}</Text>
+                      <Text style={[styles.subjectName, { color: subColor }]}>
+                        {[classLabel, entry.subject_name || 'General', sourceLabel].filter(Boolean).join(' · ')}
+                      </Text>
                     </View>
                   </View>
                   <Text style={[styles.timeText, { color: subColor }]}>{timeStr}</Text>
                 </View>
                 <View style={[styles.divider, { backgroundColor: cardBorder }]} />
-                <Text style={[styles.content, { color: titleColor }]}>{entry.content}</Text>
+                {entry.title && !photoOnly ? (
+                  <Text style={[styles.teacherName, { color: titleColor, marginBottom: 6 }]}>{entry.title}</Text>
+                ) : null}
+                {photoOnly ? null : (
+                  <Text style={[styles.content, { color: titleColor }]}>{entry.content}</Text>
+                )}
+                <DiaryPhotoStrip attachments={entry.attachments} hintColor={subColor} />
               </Animated.View>
             );
           })

@@ -241,7 +241,7 @@
     "stops_not_set": "Stop locations not set for this route yet"
   },
   "staffDiary": {
-    "header": "Diary & Homework",
+    "header": "Smart Diary",
     "today": "Today",
     "history": "History",
     "selectClass": "Select Class & Subject",
@@ -270,7 +270,7 @@
     "noHomework": "Nothing posted for this day yet",
     "emptyTitle": "No homework yet",
     "emptyCta": "Write today's homework",
-    "calendarHint": "Dots mark days with posted homework",
+    "calendarHint": "Dots mark days with homework. Photo diary stays for 1 month.",
     "due": "Due",
     "posted": "Posted",
     "edit": "Edit",
@@ -399,7 +399,9 @@
     "noEntriesTitle": "No diary entries",
     "noDiaryForDate": "Nothing was posted on this date. Choose another date above.",
     "classLoadingTitle": "Loading diary",
-    "noClassAssigned": "We're still loading this student's class. Pull down or reopen in a moment."
+    "noClassAssigned": "We're still loading this student's class. Pull down or reopen in a moment.",
+    "originalPhoto": "Original diary photo",
+    "classDiary": "Today's Class Diary"
   },
   "studentHome": {
     "todaysSnapshot": "Today's Snapshot",

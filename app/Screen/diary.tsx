@@ -11,6 +11,7 @@ import {
   Modal,
   RefreshControl,
   TouchableWithoutFeedback,
+  Image,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
@@ -45,6 +46,7 @@ import AppDatePicker from '@/src/components/AppDatePicker';
 import LogoLoader from '../../src/components/LogoLoader';
 import ReadAloudButton from '../../src/components/ReadAloudButton';
 import { readAloudService } from '../../src/services/readAloudService';
+import { isPhotoFallbackContent, normalizeDiaryAttachments } from '../../src/utils/smartDiary/attachments';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -639,15 +641,18 @@ function HistoryOverview({
 
 // ─── Task Card ────────────────────────────────────────────────────────────────
 
-function TaskCard({ item, index }: { item: DiaryEntry; index: number }) {
+function TaskCard({ item, index, hideAttachments }: { item: DiaryEntry; index: number; hideAttachments?: boolean }) {
   const { t, i18n: translationI18n } = useTranslation();
   const { theme, isDark } = useTheme();
   const styles = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const subj = getSubjectStyle(item.subjectName || item.title);
   const pressed = useSharedValue(0);
+  const [viewerUri, setViewerUri] = useState<string | null>(null);
   const dateLocale = isTelugu(translationI18n.language) ? 'te-IN' : 'en-IN';
   const localizedTitle = t_field(item.title, item.titleTe);
   const localizedContent = t_field(item.content, item.contentTe);
+  const photos = normalizeDiaryAttachments(item.attachments);
+  const photoOnly = photos.length > 0 && isPhotoFallbackContent(localizedContent);
   const dueDateText = item.homeworkDueDate
     ? `${t('studentDiary.due')} ${fromYmd(item.homeworkDueDate.slice(0, 10)).toLocaleDateString(dateLocale, { month: 'long', day: 'numeric' })}`
     : undefined;
@@ -693,16 +698,48 @@ function TaskCard({ item, index }: { item: DiaryEntry; index: number }) {
                 style={styles.readAloudButton}
               />
             </View>
-            {item.title ? <Text style={styles.taskTitle}>{localizedTitle}</Text> : null}
-            <Text style={styles.taskBody}>{localizedContent}</Text>
+            {item.title && !photoOnly ? <Text style={styles.taskTitle}>{localizedTitle}</Text> : null}
+            {!photoOnly && localizedContent ? <Text style={styles.taskBody}>{localizedContent}</Text> : null}
+            {!hideAttachments && photos.length > 0 ? (
+              <View style={styles.attachmentRow}>
+                {photos.slice(0, 3).map((src) => (
+                  <Pressable key={src} onPress={() => setViewerUri(src)}>
+                    <Image source={{ uri: src }} style={styles.attachmentThumb} resizeMode="cover" />
+                  </Pressable>
+                ))}
+                <Text style={styles.attachmentHint}>{t('studentDiary.originalPhoto', 'Original diary photo')}</Text>
+              </View>
+            ) : null}
           </View>
         </View>
       </Pressable>
+      <Modal visible={!!viewerUri} transparent animationType="fade" onRequestClose={() => setViewerUri(null)}>
+        <Pressable style={styles.photoViewerOverlay} onPress={() => setViewerUri(null)}>
+          {viewerUri ? <Image source={{ uri: viewerUri }} style={styles.photoViewerImage} resizeMode="contain" /> : null}
+        </Pressable>
+      </Modal>
     </Animated.View>
   );
 }
 
 // ─── DiaryTaskList ────────────────────────────────────────────────────────────
+
+function groupClassDiaryTasks(tasks: DiaryEntry[]) {
+  const byPhoto = new Map<string, DiaryEntry[]>();
+  for (const task of tasks) {
+    const first = normalizeDiaryAttachments(task.attachments)[0];
+    if (!first) continue;
+    const list = byPhoto.get(first) || [];
+    list.push(task);
+    byPhoto.set(first, list);
+  }
+  const bundles = [...byPhoto.values()].filter((items) => items.length > 1);
+  const bundled = new Set(bundles.flatMap((items) => items.map((item) => item.id)));
+  return {
+    bundles,
+    rest: tasks.filter((item) => !bundled.has(item.id)),
+  };
+}
 
 function DiaryTaskList({
   tasks,
@@ -740,7 +777,22 @@ function DiaryTaskList({
 
   return (
     <View style={styles.taskList}>
-      {tasks.map((item, i) => <TaskCard key={item.id} item={item} index={i} />)}
+      {groupClassDiaryTasks(tasks).bundles.map((bundle) => {
+        const photo = normalizeDiaryAttachments(bundle[0].attachments)[0] || null;
+        return (
+          <View key={photo || bundle[0].id} style={{ gap: 8, marginBottom: 8 }}>
+            <Text style={styles.taskTitle}>{t('studentDiary.classDiary', "Today's Class Diary")}</Text>
+            {bundle.map((item, i) => <TaskCard key={item.id} item={item} index={i} hideAttachments />)}
+            {photo ? (
+              <View style={styles.attachmentRow}>
+                <Image source={{ uri: photo }} style={styles.attachmentThumb} resizeMode="cover" />
+                <Text style={styles.attachmentHint}>{t('studentDiary.originalPhoto', 'Original diary photo')}</Text>
+              </View>
+            ) : null}
+          </View>
+        );
+      })}
+      {groupClassDiaryTasks(tasks).rest.map((item, i) => <TaskCard key={item.id} item={item} index={i} />)}
     </View>
   );
 }
@@ -1233,6 +1285,11 @@ const getStyles = (theme: SchoolTheme, isDark: boolean) =>
     dueText: { fontSize: 11, color: theme.colors.textMuted, fontWeight: '600' },
     taskTitle: { fontSize: 15, fontWeight: '700', color: theme.colors.textStrong, letterSpacing: -0.3, lineHeight: 21 },
     taskBody: { fontSize: 13, color: theme.colors.textSecondary, lineHeight: 19 },
+    attachmentRow: { marginTop: 10, gap: 6 },
+    attachmentThumb: { width: '100%', height: 220, borderRadius: 16, backgroundColor: 'rgba(15,23,42,0.06)' },
+    attachmentHint: { fontSize: 11, fontWeight: '600', color: theme.colors.textTertiary },
+    photoViewerOverlay: { flex: 1, backgroundColor: 'rgba(11,16,32,0.92)', alignItems: 'center', justifyContent: 'center', padding: 16 },
+    photoViewerImage: { width: '100%', height: '80%' },
 
     // Empty state
     emptyCard: {

@@ -1317,7 +1317,7 @@ export default function StaffDashboard() {
   const menuItems = useMemo(() => [
     { title: 'Notices', subtitle: 'School updates', configKey: 'notices', route: '/staff/notices' },
     { title: 'Messages', subtitle: 'In-app chat', configKey: 'messages', route: '/staff/messages' },
-    { title: 'Diary', subtitle: 'Daily logs & notes', configKey: 'diary', route: '/staff/diary' },
+    { title: 'Diary', subtitle: 'Photo, voice & homework', configKey: 'diary', route: '/staff/diary' },
     { title: 'Timetable', subtitle: 'Class schedule', configKey: 'timetable', route: '/staff/timetable' },
     { title: 'Student Portfolio', subtitle: 'First-class profiles', configKey: 'portfolio', route: '/staff/student-portfolio' },
     { title: 'Roll Numbers', subtitle: 'Set your class order', configKey: 'rollNumbers', route: '/staff/roll-numbers' },

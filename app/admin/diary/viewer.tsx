@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import Animated, {
   FadeIn,
   FadeInDown,
@@ -25,6 +25,7 @@ import AdminHeader from '../../../src/components/AdminHeader';
 import AppDatePicker, { parseYMD, toYMD } from '../../../src/components/AppDatePicker';
 import AppTextInput from '../../../src/components/AppTextInput';
 import LogoLoader from '../../../src/components/LogoLoader';
+import { DiaryPhotoStrip, diaryPhotoUrls, diarySourceLabel, isPhotoOnlyDiary } from '../../../src/components/diary/DiaryPhotoStrip';
 import { schoolColorWithAlpha } from '../../../src/constants/schoolConfig';
 import { useTheme, type SchoolTheme } from '../../../src/hooks/useTheme';
 import { api } from '../../../src/services/apiClient';
@@ -66,6 +67,8 @@ interface DiaryEntry {
   content: string;
   content_te?: string | null;
   homework_due_date?: string | null;
+  attachments?: unknown;
+  entry_source?: string | null;
   created_by: string;
   created_at: string;
   updated_at?: string;
@@ -290,10 +293,12 @@ export default function AdminDiaryViewerScreen() {
     loadOptions();
   }, [loadOptions]);
 
-  useEffect(() => {
-    setLoading(true);
-    fetchEntries();
-  }, [fetchEntries]);
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      void fetchEntries();
+    }, [fetchEntries]),
+  );
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -420,18 +425,19 @@ export default function AdminDiaryViewerScreen() {
       alertCompat('Subject required', 'Select a subject for this diary entry.');
       return;
     }
-    if (!formContent.trim()) {
+    if (!formContent.trim() && diaryPhotoUrls(editingEntry?.attachments).length === 0) {
       alertCompat('Details required', 'Enter the diary details or homework.');
       return;
     }
 
     const subject = selectedFormOption?.subjects.find((item) => item.id === formSubjectId);
+    const photos = diaryPhotoUrls(editingEntry?.attachments);
     const payload = {
       class_section_id: formClassSectionId,
       entry_date: editingEntry?.entry_date || today,
       subject_id: formMode === 'subject' ? formSubjectId : null,
       title: formTitle.trim() || (formMode === 'subject' ? `${subject?.name || 'Subject'} diary` : 'Class diary'),
-      content: formContent.trim(),
+      content: formContent.trim() || (photos.length ? (editingEntry?.content || 'Please view the attached diary photo.') : ''),
       homework_due_date: formMode === 'subject' ? formDueDate || null : null,
       input_language: 'en' as const,
     };
@@ -965,6 +971,9 @@ const DiaryEntryCard = React.memo(function DiaryEntryCard({
   const animateIn = index < 8;
   const danger = theme.colors.danger;
   const dangerTint = schoolColorWithAlpha(danger, isDark ? 0.22 : 0.12);
+  const photos = diaryPhotoUrls(entry.attachments);
+  const photoOnly = isPhotoOnlyDiary(entry.content, entry.attachments);
+  const sourceLabel = diarySourceLabel(entry.entry_source, photos.length > 0);
 
   const body = (
     <View
@@ -1005,6 +1014,20 @@ const DiaryEntryCard = React.memo(function DiaryEntryCard({
               {entry.subject_name || 'Whole class'}
             </Text>
           </View>
+          {sourceLabel ? (
+            <View
+              style={[
+                styles.typeBadge,
+                {
+                  backgroundColor: isDark ? 'rgba(79,70,229,0.18)' : '#EEF2FF',
+                  borderColor: 'transparent',
+                },
+              ]}
+            >
+              <Ionicons name={photos.length ? 'camera-outline' : 'sparkles-outline'} size={13} color={primary} />
+              <Text style={[styles.typeBadgeText, { color: primary }]}>{sourceLabel}</Text>
+            </View>
+          ) : null}
         </View>
         <View style={styles.cardActions}>
           <PressScale onPress={() => onEdit(entry)} hitSlop={8}>
@@ -1023,7 +1046,10 @@ const DiaryEntryCard = React.memo(function DiaryEntryCard({
       </View>
 
       <Text style={[styles.cardTitle, { color: titleColor }]}>{entryTitle(entry)}</Text>
-      <Text style={[styles.content, { color: subColor }]}>{entry.content || entry.content_te}</Text>
+      {photoOnly ? null : (
+        <Text style={[styles.content, { color: subColor }]}>{entry.content || entry.content_te}</Text>
+      )}
+      <DiaryPhotoStrip attachments={entry.attachments} hintColor={subColor} />
 
       <View style={[styles.cardFooter, { borderTopColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(148,163,184,0.2)' }]}>
         <View style={styles.footerItem}>

@@ -77,6 +77,7 @@ function clayCard(isDark: boolean, raised: 'sm' | 'md' | 'lg' = 'md'): any {
 }
 
 export const DIARY_HISTORY_PRIOR_DAYS = 14;
+export const DIARY_PHOTO_HISTORY_PRIOR_DAYS = 29;
 
 export type DiaryHistoryTabId = 'today' | 'history';
 
@@ -92,8 +93,8 @@ export function toYmd(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-export function priorHistoryYmds(anchor: Date): string[] {
-  return Array.from({ length: DIARY_HISTORY_PRIOR_DAYS }, (_, i) => {
+export function priorHistoryYmds(anchor: Date, priorDays = DIARY_HISTORY_PRIOR_DAYS): string[] {
+  return Array.from({ length: priorDays }, (_, i) => {
     const d = new Date(anchor);
     d.setDate(d.getDate() - (i + 1));
     return toYmd(d);
