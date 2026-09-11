@@ -77,6 +77,13 @@ export const ACCOUNTS_SIDEBAR_NAV: AccountsSidebarNavItem[] = [
     category: 'School reports',
   },
   {
+    title: 'Exams',
+    icon: 'clipboard-outline',
+    route: '/accounts/exams',
+    gradient: ['#3730A3', '#0EA5E9'],
+    category: 'Academic',
+  },
+  {
     title: 'Certificates',
     icon: 'ribbon-outline',
     route: '/accounts/certificate-generator',
@@ -274,7 +281,7 @@ export default function AccountsWebSidebar({
 
   const grouped = useMemo(() => {
     const workspace = items.filter((i) =>
-      ['/accounts/dashboard', '/accounts/fees', '/accounts/invoices', '/accounts/marks', '/accounts/certificate-generator'].includes(i.route),
+      ['/accounts/dashboard', '/accounts/fees', '/accounts/invoices', '/accounts/marks', '/accounts/exams', '/accounts/certificate-generator'].includes(i.route),
     );
     const people = items.filter((i) =>
       ['/accounts/manage-users', '/accounts/pending-enrollments'].includes(i.route),

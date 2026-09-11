@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useRouter } from 'expo-router';
+import { usePathname, useRouter } from 'expo-router';
 import {
   View,
   Text,
@@ -23,6 +23,7 @@ import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import { alertCompat } from '../../src/utils/crossPlatformAlert';
 import AdminHeader from '../../src/components/AdminHeader';
+import { useAccountsWebChrome } from '../../src/contexts/AccountsWebChromeContext';
 import AppTextInput from '../../src/components/AppTextInput';
 import AppDatePicker from '../../src/components/AppDatePicker';
 import LogoLoader from '../../src/components/LogoLoader';
@@ -293,6 +294,9 @@ function groupPapersByDate(papers: ExamPaper[]): DateGroup[] {
 export default function AdminExams() {
   useTranslation();
   const router = useRouter();
+  const pathname = usePathname();
+  const { shellActive, openMobileNav } = useAccountsWebChrome();
+  const inAccounts = (pathname || '').startsWith('/accounts');
   const { theme, isDark } = useTheme();
   const styles = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
 
@@ -611,7 +615,13 @@ export default function AdminExams() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
-      <AdminHeader title={selectedExamId ? 'Exam Timetable' : 'Exams'} showBackButton />
+      {!shellActive && (
+        <AdminHeader
+          title={selectedExamId ? 'Exam Timetable' : 'Exams'}
+          showBackButton
+          onMenuPress={inAccounts ? openMobileNav : undefined}
+        />
+      )}
 
       {selectedExamId ? (
         detailLoading || !detail ? (
@@ -630,19 +640,23 @@ export default function AdminExams() {
             onPublishToggle={handlePublishToggle}
             onResultPublishToggle={handleResultPublishToggle}
             onExportMissingMarks={handleExportMissingMarks}
-            onAssignTeacher={(paper, section) => {
-              router.push({
-                pathname: '/admin/timetable',
-                params: {
-                  classId: paper.class_id,
-                  sectionId: section.section_id,
-                  subjectId: paper.subject_id,
-                  academicYearId: detail.exam.academic_year_id,
-                  focusAssignment: '1',
-                  focusToken: Date.now().toString(),
-                },
-              });
-            }}
+            onAssignTeacher={
+              inAccounts
+                ? undefined
+                : (paper, section) => {
+                    router.push({
+                      pathname: '/admin/timetable',
+                      params: {
+                        classId: paper.class_id,
+                        sectionId: section.section_id,
+                        subjectId: paper.subject_id,
+                        academicYearId: detail.exam.academic_year_id,
+                        focusAssignment: '1',
+                        focusToken: Date.now().toString(),
+                      },
+                    });
+                  }
+            }
             onQuickAllocate={handleQuickAllocate}
             onCustomizeAllocate={() => setAllocVisible(true)}
             onManageRooms={() => setRoomsVisible(true)}
@@ -1652,7 +1666,7 @@ function HallTicketModal({
                   <Text style={styles.hallTicketOptionText}>
                     {showRollNumbers
                       ? 'Each hall ticket will print the student’s saved roll number.'
-                      : 'Roll numbers will be omitted from every hall ticket in this batch.'}
+                      : 'Each hall ticket keeps an empty Roll No. box.'}
                   </Text>
                 </View>
                 <Switch
@@ -1767,7 +1781,7 @@ function ExamDetailView({
   onPublishToggle: () => void;
   onResultPublishToggle: () => void;
   onExportMissingMarks: () => void;
-  onAssignTeacher: (paper: ExamResultReadinessPaper, section: ExamResultReadinessSection) => void;
+  onAssignTeacher?: (paper: ExamResultReadinessPaper, section: ExamResultReadinessSection) => void;
   onQuickAllocate: () => void;
   onCustomizeAllocate: () => void;
   onManageRooms: () => void;
@@ -2517,15 +2531,17 @@ function ExamDetailView({
                                 No subject teacher is assigned
                               </Text>
                             </View>
-                            <TouchableOpacity
-                              style={[styles.resultAssignTeacherBtn, { borderColor: `${theme.colors.warning}55` }]}
-                              activeOpacity={0.7}
-                              accessibilityRole="button"
-                              accessibilityLabel={`Assign ${paper.subject_name} teacher for ${paper.class_name}, section ${section.section_name}`}
-                              onPress={() => onAssignTeacher(paper, section)}
-                            >
-                              <Ionicons name="add" size={17} color={theme.colors.warning} />
-                            </TouchableOpacity>
+                            {onAssignTeacher ? (
+                              <TouchableOpacity
+                                style={[styles.resultAssignTeacherBtn, { borderColor: `${theme.colors.warning}55` }]}
+                                activeOpacity={0.7}
+                                accessibilityRole="button"
+                                accessibilityLabel={`Assign ${paper.subject_name} teacher for ${paper.class_name}, section ${section.section_name}`}
+                                onPress={() => onAssignTeacher(paper, section)}
+                              >
+                                <Ionicons name="add" size={17} color={theme.colors.warning} />
+                              </TouchableOpacity>
+                            ) : null}
                           </View>
                         ))}
 

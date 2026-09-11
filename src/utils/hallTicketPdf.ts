@@ -25,7 +25,7 @@ export interface HallTicketPdfOptions {
   principalSignatureDataUri?: string | null;
   /** Printable hall-ticket model. Defaults to the compact four-up A4 layout. */
   ticketsPerPage?: HallTicketsPerPage;
-  /** Print each student's saved roll number. Defaults to false. */
+  /** Print each student's saved roll number inside the Roll No. box. Defaults to an empty box. */
   showRollNumbers?: boolean;
 }
 
@@ -183,7 +183,7 @@ function compactScheduleVariables(paperCount: number): string {
     dateSize: Math.max(5.2, 8.5 - extraColumns * 0.42),
     subjectSize: Math.max(5.4, 9.8 - extraColumns * 0.58),
     timeSize: Math.max(4.5, 7.2 - extraColumns * 0.32),
-    captionSize: Math.max(2.5, 3.7 - extraColumns * 0.12),
+    captionSize: Math.max(4.8, 6.4 - extraColumns * 0.16),
     paddingY: Math.max(0.2, 0.5 - extraColumns * 0.03),
     paddingX: Math.max(0.18, 0.45 - extraColumns * 0.04),
   };
@@ -278,10 +278,10 @@ function ticketHtml(
           <span>Class / Section</span>
           <strong>${escapeHtml(options.className)} / ${escapeHtml(options.sectionName)}</strong>
         </div>
-        ${options.showRollNumbers ? `<div>
+        <div>
           <span>Roll No.</span>
-          <strong class="roll-number-box">${escapeHtml(student.roll_number ?? '-')}</strong>
-        </div>` : ''}
+          <strong class="roll-number-box">${options.showRollNumbers ? escapeHtml(student.roll_number ?? '-') : '&nbsp;'}</strong>
+        </div>
       </div>
 
       <div class="schedule-wrap">${scheduleMarkup(options.papers, ticketsPerPage)}</div>
@@ -605,7 +605,7 @@ export function buildHallTicketHtml(options: HallTicketPdfOptions): string {
     .schedule td {
       position: relative;
       padding-top: 1mm;
-      padding-bottom: 3mm;
+      padding-bottom: 3.6mm;
       vertical-align: top;
       background-color: rgba(255, 255, 255, 0.9);
     }
@@ -634,7 +634,8 @@ export function buildHallTicketHtml(options: HallTicketPdfOptions): string {
       bottom: 0.45mm;
       left: 0;
       margin-top: 0;
-      font-size: var(--schedule-caption-size, 3.3pt);
+      font-size: var(--schedule-caption-size, 5.8pt);
+      font-weight: 700;
     }
 
     /* Three-up model: spacious schedule cards, three or four cards per row. */
@@ -716,8 +717,9 @@ export function buildHallTicketHtml(options: HallTicketPdfOptions): string {
     .paper-sign small {
       display: block;
       color: #64748b;
-      font-size: 4.6pt;
+      font-size: 6.5pt;
       line-height: 1;
+      font-weight: 700;
     }
     .ticket--layout-3 .ticket-footer {
       min-height: 8mm;
@@ -776,6 +778,7 @@ export function buildHallTicketHtml(options: HallTicketPdfOptions): string {
       text-transform: uppercase;
       letter-spacing: 0.2pt;
     }
+    .schedule-detail th:last-child { font-size: 8pt; }
     .schedule-detail th:nth-child(1) { width: 21%; }
     .schedule-detail th:nth-child(2) { width: 30%; }
     .schedule-detail th:nth-child(3) { width: 28%; }
@@ -957,7 +960,7 @@ export function buildHallTicketHtml(options: HallTicketPdfOptions): string {
       line-height: 1.1;
     }
     .ticket--layout-4.ticket--single .schedule td small {
-      font-size: 5.2pt;
+      font-size: 7pt;
     }
   </style>
 </head>
