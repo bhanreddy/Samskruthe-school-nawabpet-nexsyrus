@@ -26,7 +26,7 @@ export interface LogoLoaderProps {
 
 // Animated injects `collapsable={false}` for native; strip it so web SVG DOM is valid.
 const PathNoCollapsable = React.forwardRef<any, React.ComponentProps<typeof Path>>(
-  (props, ref) => {
+  function PathNoCollapsable(props, ref) {
     const { collapsable: _collapsable, ...rest } = props as React.ComponentProps<typeof Path> & {
       collapsable?: boolean;
     };

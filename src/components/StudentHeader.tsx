@@ -15,6 +15,7 @@ import LanguageToggle from './LanguageToggle';
 import { Shadows, Spacing } from '../theme/themes';
 import { useTheme } from '../hooks/useTheme';
 import { useAuth } from '../hooks/useAuth';
+import { notificationInboxService } from '../services/notificationInboxService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { schoolColorWithAlpha } from '../constants/schoolConfig';
 
@@ -209,6 +210,7 @@ const StudentHeader: React.FC<StudentHeaderProps & { showBackButton?: boolean, t
                 <ClayIconButton
                     onPress={() => {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        void notificationInboxService.markAllRead();
                         router.push('/notifications' as any);
                     }}
                     isDark

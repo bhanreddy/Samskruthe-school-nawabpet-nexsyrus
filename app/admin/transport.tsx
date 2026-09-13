@@ -72,7 +72,7 @@ export default function AdminTransport() {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 768;
 
-  const [tab, setTab] = useState<'buses' | 'routes' | 'live' | 'settings'>('buses');
+  const [tab, setTab] = useState<'buses' | 'routes' | 'live' | 'safety' | 'settings'>('buses');
   const [transportData, setTransportData] = useState<BusItem[]>([]);
   const [routeRows, setRouteRows] = useState<RouteRow[]>([]);
   const [liveRows, setLiveRows] = useState<LiveRouteRow[]>([]);
@@ -80,6 +80,15 @@ export default function AdminTransport() {
   const [liveCount, setLiveCount] = useState(0);
   const [busAttendanceEnabled, setBusAttendanceEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
+
+  const [safetyDashboard, setSafetyDashboard] = useState<{
+    activeSosCount: number;
+    unresolvedIncidentsCount: number;
+    overspeedTodayCount: number;
+    recentIncidents: any[];
+  } | null>(null);
+  const [safetyIncidents, setSafetyIncidents] = useState<any[]>([]);
+  const [reconciling, setReconciling] = useState(false);
 
   const [busQuery, setBusQuery] = useState('');
   const [busFilter, setBusFilter] = useState<BusFilter>('all');
@@ -204,12 +213,62 @@ export default function AdminTransport() {
     }
   };
 
+  const fetchSafetyData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [dashRes, incRes] = await Promise.all([
+        api.get<any>('/transport/safety/dashboard'),
+        api.get<any>('/transport/safety/incidents'),
+      ]);
+      setSafetyDashboard(dashRes?.data || dashRes || null);
+      setSafetyIncidents(Array.isArray(incRes?.data) ? incRes.data : Array.isArray(incRes) ? incRes : []);
+    } catch {
+      alertCompat('Error', 'Failed to load safety data');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const handleAcknowledge = async (id: string) => {
+    try {
+      await api.patch(`/transport/safety/incidents/${id}/acknowledge`);
+      fetchSafetyData();
+      alertCompat('Success', 'Incident acknowledged');
+    } catch (e: any) {
+      alertCompat('Error', e?.message || 'Failed to acknowledge incident');
+    }
+  };
+
+  const handleResolve = async (id: string) => {
+    try {
+      await api.patch(`/transport/safety/incidents/${id}/resolve`, { resolutionNotes: 'Resolved by Admin' });
+      fetchSafetyData();
+      alertCompat('Success', 'Incident marked as resolved');
+    } catch (e: any) {
+      alertCompat('Error', e?.message || 'Failed to resolve incident');
+    }
+  };
+
+  const handleReconcile = async () => {
+    try {
+      setReconciling(true);
+      const res = await api.post<any>('/transport/safety/reconcile');
+      alertCompat('Safeguarding Reconciled', `Processed ${res?.count ?? 0} safeguarding checks.`);
+      fetchSafetyData();
+    } catch (e: any) {
+      alertCompat('Reconciliation Error', e?.message || 'Failed to run safeguarding reconciliation');
+    } finally {
+      setReconciling(false);
+    }
+  };
+
   useEffect(() => {
     if (tab === 'buses') fetchTransportData();
     else if (tab === 'routes') fetchRoutes();
     else if (tab === 'live') fetchLive();
+    else if (tab === 'safety') fetchSafetyData();
     else fetchSettings();
-  }, [tab, fetchTransportData, fetchRoutes, fetchLive, fetchSettings]);
+  }, [tab, fetchTransportData, fetchRoutes, fetchLive, fetchSafetyData, fetchSettings]);
 
   useEffect(() => {
     refreshSummaryCounts();
@@ -740,6 +799,7 @@ export default function AdminTransport() {
       refreshSummaryCounts();
     } else if (tab === 'routes') fetchRoutes();
     else if (tab === 'live') fetchLive();
+    else if (tab === 'safety') fetchSafetyData();
     else fetchSettings();
   };
 
@@ -770,8 +830,89 @@ export default function AdminTransport() {
     </Animated.View>
   );
 
+  const renderSafetyItem = ({ item }: { item: any }) => {
+    const isSos = item.incident_type === 'sos_alert' || item.incident_type === 'sos';
+    const isOverspeed = item.incident_type === 'overspeed';
+    const isSafeguarding = item.incident_type === 'safeguarding_mismatch' || item.incident_type === 'safeguarding_anomaly';
+
+    const typeColor = isSos ? '#EF4444' : isOverspeed ? '#F59E0B' : '#8B5CF6';
+    const typeIcon = isSos ? 'warning' : isOverspeed ? 'speedometer' : 'shield-half';
+    const typeTitle = isSos ? 'Driver SOS Alert' : isOverspeed ? 'Sustained Overspeed' : 'Safeguarding Anomaly';
+
+    const isResolved = item.status === 'resolved' || item.status === 'recovered' || item.status === 'false_positive';
+    const isAck = item.status === 'acknowledged';
+    const details = item.metadata || item.details || {};
+    const recordedSpeed = item.speed ?? details.peak_speed ?? details.speed_kmh ?? '--';
+    const limitSpeed = item.speed_limit ?? details.speed_limit ?? 50;
+
+    return (
+      <Animated.View entering={FadeInDown.duration(300)} style={styles.safetyCard}>
+        <View style={styles.safetyCardHeader}>
+          <View style={[styles.safetyTypeBadge, { backgroundColor: `${typeColor}15` }]}>
+            <Ionicons name={typeIcon as any} size={16} color={typeColor} />
+            <Text style={[styles.safetyTypeTxt, { color: typeColor }]}>{typeTitle}</Text>
+          </View>
+          <View style={[styles.safetyStatusBadge, isResolved ? styles.safetyStatusBadgeResolved : isAck ? styles.safetyStatusBadgeAck : styles.safetyStatusBadgeOpen]}>
+            <Text style={[styles.safetyStatusTxt, isResolved ? styles.safetyStatusTxtResolved : isAck ? styles.safetyStatusTxtAck : styles.safetyStatusTxtOpen]}>
+              {item.status ? item.status.toUpperCase() : 'ACTIVE'}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.safetyCardBody}>
+          {isOverspeed && (
+            <Text style={styles.safetyDetailMain}>
+              Recorded <Text style={{ fontWeight: '700', color: '#EF4444' }}>{recordedSpeed} km/h</Text> (Limit: {limitSpeed} km/h) for {Math.round(details.duration_seconds || 0)}s
+            </Text>
+          )}
+          {isSafeguarding && (
+            <Text style={styles.safetyDetailMain}>
+              Student <Text style={{ fontWeight: '700' }}>{details.student_name || 'Student'}</Text> was boarded on bus but marked <Text style={{ fontWeight: '700', color: '#EF4444' }}>Absent</Text> in class {details.class_name || ''}
+            </Text>
+          )}
+          {isSos && (
+            <Text style={styles.safetyDetailMain}>
+              Emergency SOS triggered by driver: {details.driver_name || 'Driver'}. Location: {item.location_lat ? `${Number(item.location_lat).toFixed(4)}, ${Number(item.location_lng).toFixed(4)}` : details.latitude ? `${details.latitude}, ${details.longitude}` : 'Live trip'}
+            </Text>
+          )}
+
+          <View style={styles.safetyMetaRow}>
+            <Text style={styles.safetyMetaTxt}>
+              {item.created_at ? new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+              {item.bus_no ? ` • Bus ${item.bus_no}` : item.bus_id ? ` • Bus ID #${item.bus_id}` : ''}
+              {item.route_name ? ` • Route ${item.route_name}` : item.route_id ? ` • Route #${item.route_id}` : ''}
+            </Text>
+          </View>
+        </View>
+
+        {!isResolved && (
+          <View style={styles.safetyActionsRow}>
+            {!isAck && (
+              <TouchableOpacity
+                style={styles.safetyAckBtn}
+                onPress={() => handleAcknowledge(item.id)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="checkmark-circle-outline" size={16} color="#4F46E5" />
+                <Text style={styles.safetyAckBtnTxt}>Acknowledge</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={styles.safetyResolveBtn}
+              onPress={() => handleResolve(item.id)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="shield-checkmark" size={16} color="#10B981" />
+              <Text style={styles.safetyResolveBtnTxt}>Resolve</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </Animated.View>
+    );
+  };
+
   const listData =
-    tab === 'buses' ? filteredBuses : tab === 'routes' ? filteredRoutes : tab === 'live' ? liveRows : [];
+    tab === 'buses' ? filteredBuses : tab === 'routes' ? filteredRoutes : tab === 'live' ? liveRows : tab === 'safety' ? safetyIncidents : [];
 
   return (
     <View style={styles.container}>
@@ -794,7 +935,7 @@ export default function AdminTransport() {
               ? String(item.id)
               : String(item.route_id)
         }
-        renderItem={tab === 'buses' ? renderBusItem as any : tab === 'routes' ? renderRouteItem as any : tab === 'live' ? renderLiveRow as any : null}
+        renderItem={tab === 'buses' ? renderBusItem as any : tab === 'routes' ? renderRouteItem as any : tab === 'live' ? renderLiveRow as any : tab === 'safety' ? renderSafetyItem as any : null}
         contentContainerStyle={[styles.listContent, isDesktop && styles.listContentDesktop]}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={onRefresh} tintColor="#6366F1" />}
         windowSize={7}
@@ -869,6 +1010,20 @@ export default function AdminTransport() {
                   activeOpacity={0.8}
                 >
                   <Text style={[styles.pillTxt, tab === 'live' && styles.pillTxtOn]}>Live Today</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.pillBtn, tab === 'safety' && styles.pillBtnOn]}
+                  onPress={() => setTab('safety')}
+                  activeOpacity={0.8}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Text style={[styles.pillTxt, tab === 'safety' && styles.pillTxtOn]}>Safety</Text>
+                    {Boolean(safetyDashboard?.activeSosCount) && (
+                      <View style={{ backgroundColor: '#EF4444', borderRadius: 8, paddingHorizontal: 5, paddingVertical: 1 }}>
+                        <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{safetyDashboard?.activeSosCount}</Text>
+                      </View>
+                    )}
+                  </View>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.pillBtn, tab === 'settings' && styles.pillBtnOn]}
@@ -955,6 +1110,50 @@ export default function AdminTransport() {
               </View>
             )}
 
+            {tab === 'safety' && (
+              <Animated.View entering={FadeInDown.duration(400)} style={styles.safetyOverviewBox}>
+                <View style={styles.safetyKpiGrid}>
+                  <View style={[styles.safetyKpiCard, safetyDashboard?.activeSosCount ? { borderColor: '#EF4444' } : null]}>
+                    <Ionicons name="alert-circle" size={20} color={safetyDashboard?.activeSosCount ? '#EF4444' : '#64748B'} />
+                    <Text style={[styles.safetyKpiVal, safetyDashboard?.activeSosCount ? { color: '#EF4444' } : null]}>
+                      {safetyDashboard?.activeSosCount || 0}
+                    </Text>
+                    <Text style={styles.safetyKpiLbl}>Active SOS</Text>
+                  </View>
+
+                  <View style={styles.safetyKpiCard}>
+                    <Ionicons name="speedometer-outline" size={20} color="#F59E0B" />
+                    <Text style={styles.safetyKpiVal}>{safetyDashboard?.overspeedTodayCount || 0}</Text>
+                    <Text style={styles.safetyKpiLbl}>Overspeed Today</Text>
+                  </View>
+
+                  <View style={styles.safetyKpiCard}>
+                    <Ionicons name="shield-outline" size={20} color="#6366F1" />
+                    <Text style={styles.safetyKpiVal}>{safetyDashboard?.unresolvedIncidentsCount || 0}</Text>
+                    <Text style={styles.safetyKpiLbl}>Unresolved</Text>
+                  </View>
+                </View>
+
+                <View style={styles.safetyActionBanner}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.safetyActionTitle}>Safeguarding Morning Check</Text>
+                    <Text style={styles.safetyActionSub}>
+                      Reconciles morning bus attendance against absent classroom records.
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.safetyReconcileBtn, reconciling && { opacity: 0.6 }]}
+                    onPress={handleReconcile}
+                    disabled={reconciling}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="sync" size={16} color="#fff" />
+                    <Text style={styles.safetyReconcileBtnTxt}>{reconciling ? 'Checking...' : 'Run Check'}</Text>
+                  </TouchableOpacity>
+                </View>
+              </Animated.View>
+            )}
+
             {tab === 'settings' && (
               <Animated.View
                 entering={FadeInDown.duration(400).springify()}
@@ -995,9 +1194,11 @@ export default function AdminTransport() {
                       ? routeQuery
                         ? 'No routes match your search'
                         : 'No routes yet'
+                    : tab === 'safety'
+                      ? 'No safety incidents recorded'
                       : 'No live trips today'
                 }
-                icon={tab === 'buses' ? 'bus-outline' : tab === 'routes' ? 'map-outline' : 'navigate-outline'}
+                icon={tab === 'buses' ? 'bus-outline' : tab === 'routes' ? 'map-outline' : tab === 'safety' ? 'shield-checkmark-outline' : 'navigate-outline'}
                 actionLabel={
                   tab === 'buses' && !busQuery && busFilter === 'all'
                     ? 'Add first bus'
@@ -2295,5 +2496,173 @@ const getStyles = (theme: Theme) =>
     driverHintSep: {
       color: '#CBD5E1',
       marginHorizontal: 2,
+    },
+    safetyOverviewBox: {
+      marginBottom: 16,
+      gap: 12,
+    },
+    safetyKpiGrid: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    safetyKpiCard: {
+      flex: 1,
+      backgroundColor: '#FFFFFF',
+      borderRadius: 12,
+      padding: 12,
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: '#E2E8F0',
+    },
+    safetyKpiVal: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: '#1E293B',
+      marginTop: 4,
+    },
+    safetyKpiLbl: {
+      fontSize: 11,
+      color: '#64748B',
+      marginTop: 2,
+      textAlign: 'center',
+    },
+    safetyActionBanner: {
+      backgroundColor: '#EEF2FF',
+      borderRadius: 12,
+      padding: 14,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      borderWidth: 1,
+      borderColor: '#C7D2FE',
+    },
+    safetyActionTitle: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: '#312E81',
+    },
+    safetyActionSub: {
+      fontSize: 11,
+      color: '#4338CA',
+      marginTop: 2,
+    },
+    safetyReconcileBtn: {
+      backgroundColor: '#4F46E5',
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    safetyReconcileBtnTxt: {
+      color: '#FFFFFF',
+      fontSize: 12,
+      fontWeight: '700',
+    },
+    safetyCard: {
+      backgroundColor: '#FFFFFF',
+      borderRadius: 12,
+      padding: 14,
+      marginBottom: 10,
+      borderWidth: 1,
+      borderColor: '#E2E8F0',
+    },
+    safetyCardHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 8,
+    },
+    safetyTypeBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 6,
+    },
+    safetyTypeTxt: {
+      fontSize: 12,
+      fontWeight: '700',
+    },
+    safetyStatusBadge: {
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 6,
+    },
+    safetyStatusBadgeOpen: {
+      backgroundColor: '#FEF2F2',
+    },
+    safetyStatusBadgeAck: {
+      backgroundColor: '#EFF6FF',
+    },
+    safetyStatusBadgeResolved: {
+      backgroundColor: '#ECFDF5',
+    },
+    safetyStatusTxt: {
+      fontSize: 10,
+      fontWeight: '800',
+      letterSpacing: 0.5,
+    },
+    safetyStatusTxtOpen: {
+      color: '#DC2626',
+    },
+    safetyStatusTxtAck: {
+      color: '#2563EB',
+    },
+    safetyStatusTxtResolved: {
+      color: '#059669',
+    },
+    safetyCardBody: {
+      gap: 4,
+    },
+    safetyDetailMain: {
+      fontSize: 13,
+      color: '#334155',
+      lineHeight: 18,
+    },
+    safetyMetaRow: {
+      marginTop: 4,
+    },
+    safetyMetaTxt: {
+      fontSize: 11,
+      color: '#94A3B8',
+    },
+    safetyActionsRow: {
+      flexDirection: 'row',
+      gap: 10,
+      marginTop: 10,
+      paddingTop: 10,
+      borderTopWidth: 1,
+      borderTopColor: '#F1F5F9',
+    },
+    safetyAckBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 6,
+      backgroundColor: '#EEF2FF',
+    },
+    safetyAckBtnTxt: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: '#4F46E5',
+    },
+    safetyResolveBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 6,
+      backgroundColor: '#ECFDF5',
+    },
+    safetyResolveBtnTxt: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: '#059669',
     },
   });

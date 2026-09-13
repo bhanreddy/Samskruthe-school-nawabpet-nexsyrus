@@ -73,7 +73,7 @@ const ForgotPasswordScreen: React.FC = () => {
 
                         <Animated.View entering={FadeInDown.delay(200).duration(600).springify()}>
                             <Text style={styles.subtitleText}>
-                                Don't worry! It happens. Please enter your ID or Email associated with your account.
+                                Don&apos;t worry! It happens. Please enter your ID or Email associated with your account.
                             </Text>
                         </Animated.View>
 

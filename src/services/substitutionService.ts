@@ -26,6 +26,8 @@ export interface SubstitutionSlot {
   substitute_teacher_name?: string | null;
   reason?: string | null;
   assigned_at?: string | null;
+  is_auto_suggested?: boolean | null;
+  leave_application_id?: string | null;
 }
 
 export interface SubstitutionBoard {

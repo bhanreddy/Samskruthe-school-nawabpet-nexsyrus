@@ -13,10 +13,11 @@ import {
  * and every screen keeps using its normal session-derived ("my …") calls.
  */
 export function useEffectiveStaffId() {
-  const { staffId, viewAsName, viewAsUserId } = useLocalSearchParams<{
+  const { staffId, viewAsName, viewAsUserId, viewAsActorId } = useLocalSearchParams<{
     staffId?: string;
     viewAsName?: string;
     viewAsUserId?: string;
+    viewAsActorId?: string;
   }>();
   const stored = useSyncExternalStore(
     subscribeToStaffPortalSession,
@@ -26,9 +27,9 @@ export function useEffectiveStaffId() {
 
   useEffect(() => {
     if (typeof staffId === 'string' && staffId.length > 0) {
-      setStaffPortalSession(staffId, viewAsName, viewAsUserId);
+      setStaffPortalSession(staffId, viewAsName, viewAsUserId, viewAsActorId);
     }
-  }, [staffId, viewAsName, viewAsUserId]);
+  }, [staffId, viewAsName, viewAsUserId, viewAsActorId]);
 
   const effectiveStaffId = typeof staffId === 'string' && staffId.length > 0
     ? staffId
@@ -39,12 +40,19 @@ export function useEffectiveStaffId() {
   const effectiveUserId = typeof viewAsUserId === 'string' && viewAsUserId.length > 0
     ? viewAsUserId
     : stored.userId;
-  const isViewingAsAdmin = typeof effectiveStaffId === 'string' && effectiveStaffId.length > 0;
+  const actorUserId = typeof viewAsActorId === 'string' && viewAsActorId.length > 0
+    ? viewAsActorId
+    : stored.actorUserId;
+  const isViewingAsAdmin = typeof effectiveStaffId === 'string'
+    && effectiveStaffId.length > 0
+    && typeof actorUserId === 'string'
+    && actorUserId.length > 0;
 
   return {
     staffId: isViewingAsAdmin ? effectiveStaffId : undefined,
     isViewingAsAdmin,
     viewAsName: isViewingAsAdmin ? effectiveName : undefined,
     userId: isViewingAsAdmin ? effectiveUserId : undefined,
+    actorUserId: isViewingAsAdmin ? actorUserId : undefined,
   };
 }

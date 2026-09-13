@@ -21,6 +21,9 @@ export interface ValidatedUser {
   staffId?: string | null;
   /** Legacy snake_case alias for staffId */
   staff_id?: string | null;
+  /** Canonical person identifier (persons.id) */
+  personId?: string | null;
+  person_id?: string | null;
   /** Staff code */
   staff_code?: string | null;
   has_student_profile?: boolean;

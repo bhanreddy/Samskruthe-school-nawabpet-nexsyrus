@@ -11,6 +11,7 @@ import { schoolColorWithAlpha } from '../constants/schoolConfig';
 import { useTheme } from '../hooks/useTheme';
 import { useAuth } from '../hooks/useAuth';
 import { useEffectiveStaffId } from '../hooks/useEffectiveStaffId';
+import { exitStaffPortalToAdmin } from '../services/staffPortalExit';
 import { Spacing } from '../theme/themes';
 
 import Animated, { SharedValue, useAnimatedStyle, interpolateColor, interpolate, Extrapolation } from 'react-native-reanimated';
@@ -40,8 +41,8 @@ const StaffHeader: React.FC<StaffHeaderProps> = ({
     const { theme, isDark } = useTheme();
     const [menuVisible, setMenuVisible] = useState(false);
     const { user } = useAuth();
-    const { staffId, isViewingAsAdmin, viewAsName, userId: viewAsUserId } = useEffectiveStaffId();
-    const viewAsParams = isViewingAsAdmin ? { staffId, viewAsName, viewAsUserId } : undefined;
+    const { staffId, isViewingAsAdmin, viewAsName, userId: viewAsUserId, actorUserId } = useEffectiveStaffId();
+    const viewAsParams = isViewingAsAdmin ? { staffId, viewAsName, viewAsUserId, viewAsActorId: actorUserId } : undefined;
 
     const accent = theme.colors.primary;
 
@@ -97,6 +98,7 @@ const StaffHeader: React.FC<StaffHeaderProps> = ({
     const runBack = () => {
         if (onBack) onBack();
         else if (router.canGoBack()) router.back();
+        else if (isViewingAsAdmin) void exitStaffPortalToAdmin();
         else router.push({ pathname: '/staff/dashboard', params: viewAsParams } as any);
     };
 

@@ -9,6 +9,8 @@ import * as accountVault from './accountVault';
 import type { VaultAccount } from './accountVault';
 import type { AccessContext, PortalContextsPayload } from '../types/context';
 import { refreshAccessTokenStandalone } from './pushFanout';
+import { staffBiometricService } from './staffBiometricService';
+import { clearStaffPortalSession, getStaffPortalSession } from './staffPortalSession';
 
 const TOKEN_SKEW_SECONDS = 60;
 
@@ -82,6 +84,20 @@ function isConfirmedRefreshRejection(err: unknown): boolean {
       message.includes('invalid grant')
     )
   );
+}
+
+function liveSessionUserId(
+  supabaseSession: NonNullable<AuthSession['supabaseSession']>
+): string | undefined {
+  return supabaseSession.user?.id;
+}
+
+function validatedUserMatchesLiveSession(
+  supabaseSession: NonNullable<AuthSession['supabaseSession']>,
+  validatedUser: ValidatedUser | null | undefined
+): boolean {
+  const liveId = liveSessionUserId(supabaseSession);
+  return Boolean(liveId && validatedUser?.userId && liveId === validatedUser.userId);
 }
 
 async function persistSessionFromRefresh(
@@ -169,6 +185,96 @@ async function saveRecoveryCredentialReliably(
 
 async function syncVaultFromAuthSession(authSession: AuthSession): Promise<void> {
   await accountVault.addAccount(accountVault.buildVaultAccount(authSession));
+}
+
+function mapAdditiveValidationError(err: any): string {
+  const errMsg = err?.message || '';
+  const errMsgLc = errMsg.toLowerCase();
+  let errorMsg = errMsg || 'Validation failed. Contact support.';
+
+  if (errMsgLc.includes('account_not_in_school') || errMsgLc.includes('is not registered with')) {
+    errorMsg = `This account is not registered with ${SCHOOL_NAME}.\nContact your school administrator.`;
+  } else if (err?.code === 'SCHOOL_MISMATCH' || errMsgLc.includes('user does not belong to this school')) {
+    errorMsg = `This account does not belong to ${SCHOOL_NAME}.\nContact your school administrator.`;
+  } else if (errMsgLc.includes('account_locked')) {
+    errorMsg = `Your account has been locked. Contact ${SCHOOL_NAME} admin.`;
+  } else if (errMsgLc.includes('account_not_active')) {
+    errorMsg = `Your account is not active. Contact ${SCHOOL_NAME} admin.`;
+  }
+  return errorMsg;
+}
+
+function mapQrExchangeError(error: any): string {
+  if (error instanceof APIError && error.statusCode === 0) {
+    return 'Internet connection is required for QR login.';
+  }
+  if (error?.code === 'NOT_SCHOOLIMS_LOGIN_QR' || error?.code === 'UNSUPPORTED_LOGIN_QR_VERSION' || error?.code === 'INVALID_LOGIN_QR') {
+    return 'This is not a valid SchoolIMS login QR.';
+  }
+  if (error instanceof APIError && (error.statusCode === 503 || error.statusCode === 429)) {
+    return 'QR login is temporarily unavailable. Please wait and try again.';
+  }
+  if (error instanceof APIError && error.statusCode === 401) {
+    return 'This login QR is no longer valid. Please request a new QR from your school.';
+  }
+  return 'Unable to sign in using this QR. Please contact your school administrator.';
+}
+
+/**
+ * Validate + vault a newly authenticated Supabase session without making it
+ * the live account when another account is already active.
+ */
+async function completeAdditiveVaultLogin(
+  supabaseSession: Session,
+  previousActiveUserId: string | null,
+  recovery?: { email: string; password: string }
+): Promise<{ session?: AuthSession; error?: string }> {
+  try {
+    const validatedUser = await api.post<ValidatedUser>('/auth/validate-school-user', {}, {
+      headers: { Authorization: `Bearer ${supabaseSession.access_token}` },
+      silent: true,
+    });
+
+    if (!validatedUser) {
+      if (previousActiveUserId) await doSwitchAccount(previousActiveUserId);
+      return { error: 'Verification failed. Your session could not be validated.' };
+    }
+
+    if (validatedUser.schoolId !== SCHOOL_ID) {
+      if (previousActiveUserId) await doSwitchAccount(previousActiveUserId);
+      return { error: `This account does not belong to ${SCHOOL_NAME}.\nContact your school administrator.` };
+    }
+
+    const authSession: AuthSession = {
+      supabaseSession,
+      validatedUser,
+      tokenExpiresAt: supabaseSession.expires_at ? supabaseSession.expires_at * 1000 : Date.now() + 3600000,
+    };
+
+    await accountVault.addAccount(accountVault.buildVaultAccount(authSession));
+    if (recovery) {
+      await saveRecoveryCredentialReliably(
+        authSession.validatedUser.userId,
+        recovery.email,
+        recovery.password
+      );
+    }
+
+    const newUserId = validatedUser.userId;
+    if (previousActiveUserId && previousActiveUserId !== newUserId) {
+      await doSwitchAccount(previousActiveUserId);
+    } else if (!previousActiveUserId) {
+      await setSecureItem(STORAGE_KEY, JSON.stringify(authSession));
+      await accountVault.setActiveAccountId(newUserId);
+    }
+
+    return { session: authSession };
+  } catch (err: any) {
+    if (previousActiveUserId) {
+      try { await doSwitchAccount(previousActiveUserId); } catch { /* best-effort */ }
+    }
+    return { error: mapAdditiveValidationError(err) };
+  }
 }
 
 /** Persist the live Supabase client's session for the account we're switching away from. */
@@ -436,9 +542,25 @@ export const clearAuthState = async (): Promise<void> => {
 async function doSwitchAccount(
   userId: string
 ): Promise<{ session?: AuthSession; error?: string }> {
+  clearStaffPortalSession();
   const accounts = await accountVault.listAccounts();
   const target = accounts.find((a) => a.userId === userId);
   if (!target) return { error: 'Account not found in vault' };
+
+  // Guard: If device is registered to another staff person, block switching into this staff account
+  const reg = await staffBiometricService.getStoredRegistration();
+  if (
+    (reg.status === 'pending' || reg.status === 'approved') &&
+    reg.personId &&
+    target.validatedUser.personId &&
+    reg.personId !== target.validatedUser.personId &&
+    target.validatedUser.has_staff_profile
+  ) {
+    return {
+      error: 'This device is registered to another staff member. Multi-staff account switching is not permitted on registered devices.'
+    };
+  }
+
   const previousActiveId = await accountVault.getActiveAccountId();
   const previousActive =
     previousActiveId && previousActiveId !== userId
@@ -549,6 +671,90 @@ async function finalizeSwitchedSession(
   return { session: newActive };
 }
 
+type RecoveryCredential = { email: string; password: string };
+
+/** Shared post-auth pipeline. Supabase issues the session; SchoolIMS validates
+ * its tenant, account status, role, profile, and device ownership. */
+async function finalizeSupabaseSignIn(
+  supabaseSession: Session,
+  userId: string,
+  recoveryCredential?: RecoveryCredential,
+): Promise<{ session?: AuthSession; error?: string }> {
+  try {
+    const validatedUser = await api.post<ValidatedUser>('/auth/validate-school-user', {}, {
+      headers: { Authorization: `Bearer ${supabaseSession.access_token}` },
+      silent: true,
+    });
+    if (!validatedUser) throw new Error('Verification failed. Your session could not be validated.');
+    if (validatedUser.userId !== userId) throw new Error('Session identity verification failed.');
+    if (validatedUser.schoolId !== SCHOOL_ID) {
+      await AuthService.signOut();
+      return { error: `This account does not belong to ${SCHOOL_NAME}.\nContact your school administrator.` };
+    }
+
+    const reg = await staffBiometricService.getStoredRegistration();
+    if (
+      (reg.status === 'pending' || reg.status === 'approved') &&
+      reg.personId && validatedUser.personId && reg.personId !== validatedUser.personId &&
+      validatedUser.has_staff_profile
+    ) {
+      await AuthService.signOut();
+      return { error: 'This device is registered to another staff member. Multi-staff sharing on a registered mobile installation is not permitted.' };
+    }
+
+    const authSession: AuthSession = {
+      supabaseSession,
+      validatedUser,
+      tokenExpiresAt: supabaseSession.expires_at ? supabaseSession.expires_at * 1000 : Date.now() + 3600000,
+    };
+    await setSecureItem(STORAGE_KEY, JSON.stringify(authSession));
+    try {
+      await accountVault.addAccount(accountVault.buildVaultAccount(authSession));
+      await accountVault.setActiveAccountId(authSession.validatedUser.userId);
+      if (recoveryCredential) {
+        await saveRecoveryCredentialReliably(
+          authSession.validatedUser.userId,
+          recoveryCredential.email,
+          recoveryCredential.password,
+        );
+      }
+    } catch (vaultErr) {
+      if (__DEV__) console.warn('[AuthService] vault registration failed:', vaultErr);
+    }
+    return { session: authSession };
+  } catch (err: any) {
+    const errCode = err?.code;
+    const errMsg = err?.message || '';
+    if (
+      errCode === 'OUT_OF_HOURS_NO_ACCESS' ||
+      errMsg.includes('Accounts department access is restricted to school hours') ||
+      errMsg.includes('OUT_OF_HOURS_NO_ACCESS')
+    ) {
+      await AuthService.signOut();
+      const outOfHoursError: any = new Error(errMsg || 'Access restricted to school hours');
+      outOfHoursError.code = 'OUT_OF_HOURS_NO_ACCESS';
+      outOfHoursError.userId = userId;
+      throw outOfHoursError;
+    }
+
+    let errorMsg = errMsg || 'Validation failed. Contact support.';
+    const lower = errMsg.toLowerCase();
+    if (lower.includes('account_not_in_school') || lower.includes('is not registered with')) {
+      errorMsg = `This account is not registered with ${SCHOOL_NAME}.\nContact your school administrator.`;
+    } else if (errCode === 'SCHOOL_MISMATCH' || lower.includes('user does not belong to this school')) {
+      errorMsg = `This account does not belong to ${SCHOOL_NAME}.\nContact your school administrator.`;
+    } else if (lower.includes('account_locked')) {
+      errorMsg = `Your account has been locked. Contact ${SCHOOL_NAME} admin.`;
+    } else if (lower.includes('account_not_active')) {
+      errorMsg = `Your account is not active. Contact ${SCHOOL_NAME} admin.`;
+    } else if (lower.includes('school_id is required')) {
+      errorMsg = 'Tenant context missing. Please restart the app and try again.';
+    }
+    await AuthService.signOut();
+    return { error: errorMsg };
+  }
+}
+
 export const AuthService = {
   changePassword: async (currentPassword: string, newPassword: string): Promise<void> => {
     const {
@@ -562,21 +768,10 @@ export const AuthService = {
 
     beginInternalSwap();
     try {
-      const { data: reauthenticated, error: signInError } =
-        await supabase.auth.signInWithPassword({
-          email,
-          password: currentPassword,
-        });
-      if (
-        signInError ||
-        !reauthenticated.session ||
-        reauthenticated.session.user.id !== userId
-      ) {
-        throw new Error('Current password is incorrect.');
-      }
-
-      const { error } = await supabase.auth.updateUser({ password: newPassword });
-      if (error) throw error;
+      await api.post('/auth/change-password', {
+        current_password: currentPassword,
+        new_password: newPassword,
+      }, { silent: true });
       await saveRecoveryCredentialReliably(
         userId,
         email,
@@ -632,6 +827,13 @@ export const AuthService = {
     }
     if (!parsed?.validatedUser) return null;
 
+    // Opening a staff member's portal from Manage Staff is not a portal-context
+    // switch. Applying the viewed teacher's context here permanently turned the
+    // signed-in admin into that staff account.
+    if (getStaffPortalSession().staffId) {
+      return parsed;
+    }
+
     const primaryRole = activeContext.role_codes[0] || parsed.validatedUser.role?.code || 'student';
     const roleCode = mapRoleCodeForFrontend(primaryRole);
 
@@ -657,110 +859,40 @@ export const AuthService = {
   },
 
   signIn: async (email: string, password: string): Promise<{ session?: AuthSession; error?: string }> => {
-    // 1. clearAuthState() — always clear before new login
     await clearAuthState();
-
     const canonicalEmail = normalizeLoginEmail(email);
-
-    // 2. supabase.auth.signInWithPassword({ email, password })
     const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
       email: canonicalEmail,
       password,
     });
-
-    // 3. If Supabase error → return { error: "Invalid credentials" }
     if (signInError || !signInData.session) {
       return { error: 'Invalid credentials' };
     }
+    return finalizeSupabaseSignIn(signInData.session, signInData.user.id, {
+      email: canonicalEmail,
+      password,
+    });
+  },
 
-    // 4. Call POST /api/auth/validate-school-user with JWT
+  signInWithQr: async (qrPayload: string): Promise<{ session?: AuthSession; error?: string }> => {
+    await clearAuthState();
     try {
-      const validatedUser = await api.post<ValidatedUser>('/auth/validate-school-user', {}, {
-        headers: {
-          'Authorization': `Bearer ${signInData.session.access_token}`
-        },
-        silent: true
+      const exchange = await api.post<{ tokenHash: string; type: 'magiclink' }>(
+        '/auth/qr/resolve',
+        { qrPayload },
+        { silent: true, timeoutMs: 20000, omitAuth: true },
+      );
+      const { data, error } = await supabase.auth.verifyOtp({
+        token_hash: exchange.tokenHash,
+        type: exchange.type,
       });
-
-      // Guard: If validation failed (e.g. 401/403 returned null due to silent: true)
-      if (!validatedUser) {
-        throw new Error('Verification failed. Your session could not be validated.');
+      if (error || !data.session || !data.user) {
+        return { error: 'This login QR is no longer valid. Please request a new QR from your school.' };
       }
-
-      // 5. Multitenancy gate: verify user belongs to THIS school build
-      if (validatedUser.schoolId !== SCHOOL_ID) {
-        console.log('[AUTH_OUT]', 'api_401', new Date().toISOString());
-        await AuthService.signOut();
-        return { error: `This account does not belong to ${SCHOOL_NAME}.\nContact your school administrator.` };
-      }
-
-      // 7. Store AuthSession in SecureStore
-      const authSession: AuthSession = {
-        supabaseSession: signInData.session,
-        validatedUser,
-        tokenExpiresAt: signInData.session.expires_at ? signInData.session.expires_at * 1000 : Date.now() + 3600000,
-      };
-
-      await setSecureItem(STORAGE_KEY, JSON.stringify(authSession));
-
-      // 7b. Register the session into the multi-account vault so a single-account
-      //     user is transparently "a vault of one" and is set as the active
-      //     account. Wrapped so a vault failure can NEVER break the existing
-      //     login flow (backward-compat invariant).
-      try {
-        await accountVault.addAccount(accountVault.buildVaultAccount(authSession));
-        await accountVault.setActiveAccountId(authSession.validatedUser.userId);
-        await saveRecoveryCredentialReliably(
-          authSession.validatedUser.userId,
-          canonicalEmail,
-          password
-        );
-      } catch (vaultErr) {
-        if (__DEV__) console.warn('[AuthService] vault register (signIn) failed:', vaultErr);
-      }
-
-      // 8. Return { session: AuthSession }
-      return { session: authSession };
-    } catch (err: any) {
-      // 5. If 403 account_not_in_school → signOut(), return { error: "This account does not belong to this school." }
-      // 6. If 403 account_locked → signOut(), return { error: "Your account is locked. Contact your admin." }
-
-      // OUT_OF_HOURS: Re-throw so the unified login screen (app/login.tsx) can catch and show the access request modal
-      const errCode = err?.code;
-      const errMsg = err?.message || '';
-      
-      const isOutOfHours =
-        errCode === 'OUT_OF_HOURS_NO_ACCESS' ||
-        errMsg.includes('Accounts department access is restricted to school hours') ||
-        errMsg.indexOf('OUT_OF_HOURS_NO_ACCESS') !== -1;
-
-      if (isOutOfHours) {
-        console.log('[AUTH_OUT]', 'api_401', new Date().toISOString());
-        await AuthService.signOut();
-        const outOfHoursError: any = new Error(errMsg || 'Access restricted to school hours');
-        outOfHoursError.code = 'OUT_OF_HOURS_NO_ACCESS';
-        outOfHoursError.userId = signInData.user.id;
-        throw outOfHoursError;
-      }
-
-      let errorMsg = err?.message || 'Validation failed. Contact support.';
-      
-      const errMsgLc = errMsg.toLowerCase();
-      if (errMsgLc.includes('account_not_in_school') || errMsgLc.includes('is not registered with')) {
-        errorMsg = `This account is not registered with ${SCHOOL_NAME}.\nContact your school administrator.`;
-      } else if (err?.code === 'SCHOOL_MISMATCH' || errMsgLc.includes('user does not belong to this school')) {
-        errorMsg = `This account does not belong to ${SCHOOL_NAME}.\nContact your school administrator.`;
-      } else if (errMsgLc.includes('account_locked')) {
-        errorMsg = `Your account has been locked. Contact ${SCHOOL_NAME} admin.`;
-      } else if (errMsgLc.includes('account_not_active')) {
-        errorMsg = `Your account is not active. Contact ${SCHOOL_NAME} admin.`;
-      } else if (errMsgLc.includes('school_id is required')) {
-        errorMsg = 'Tenant context missing. Please restart the app and try again.';
-      }
-
-      console.log('[AUTH_OUT]', 'api_401', new Date().toISOString());
-      await AuthService.signOut();
-      return { error: errorMsg };
+      const result = await finalizeSupabaseSignIn(data.session, data.user.id);
+      return result.session ? result : { error: 'Unable to sign in using this QR. Please contact your school administrator.' };
+    } catch (error: any) {
+      return { error: mapQrExchangeError(error) };
     }
   },
 
@@ -804,69 +936,46 @@ export const AuthService = {
           return { error: 'Invalid credentials' };
         }
 
-        try {
-          const validatedUser = await api.post<ValidatedUser>('/auth/validate-school-user', {}, {
-            headers: { Authorization: `Bearer ${signInData.session.access_token}` },
-            silent: true,
-          });
+        return completeAdditiveVaultLogin(signInData.session, previousActiveUserId, {
+          email: canonicalEmail,
+          password,
+        });
+      } finally {
+        endInternalSwap();
+      }
+    }),
 
-          if (!validatedUser) {
-            if (previousActiveUserId) await doSwitchAccount(previousActiveUserId);
-            return { error: 'Verification failed. Your session could not be validated.' };
-          }
+  /**
+   * addAccountWithQr — same additive vault behaviour as addAccount, using a
+   * school-issued login QR instead of email/password. Never calls clearAuthState().
+   */
+  addAccountWithQr: (qrPayload: string): Promise<{ session?: AuthSession; error?: string }> =>
+    enqueueSwap(async () => {
+      const previousActiveUserId = await accountVault.getActiveAccountId();
 
-          // Same-school gate — this single-tenant build only ever holds one school.
-          if (validatedUser.schoolId !== SCHOOL_ID) {
-            if (previousActiveUserId) await doSwitchAccount(previousActiveUserId);
-            return { error: `This account does not belong to ${SCHOOL_NAME}.\nContact your school administrator.` };
-          }
-
-          const authSession: AuthSession = {
-            supabaseSession: signInData.session,
-            validatedUser,
-            tokenExpiresAt: signInData.session.expires_at ? signInData.session.expires_at * 1000 : Date.now() + 3600000,
-          };
-
-          // Persist the new account into the vault (does not change active yet).
-          await accountVault.addAccount(accountVault.buildVaultAccount(authSession));
-          await saveRecoveryCredentialReliably(
-            authSession.validatedUser.userId,
-            canonicalEmail,
-            password
-          );
-
-          const newUserId = validatedUser.userId;
-          if (previousActiveUserId && previousActiveUserId !== newUserId) {
-            // Restore the previously-active account as the live + active session.
-            await doSwitchAccount(previousActiveUserId);
-          } else if (!previousActiveUserId) {
-            // First account ever — it becomes active; client is already on it.
-            await setSecureItem(STORAGE_KEY, JSON.stringify(authSession));
-            await accountVault.setActiveAccountId(newUserId);
-          }
-          // (previousActiveUserId === newUserId → re-added the active account; no-op.)
-
-          return { session: authSession };
-        } catch (err: any) {
-          // Validation threw — restore the previous active account, then map error.
+      beginInternalSwap();
+      try {
+        const exchange = await api.post<{ tokenHash: string; type: 'magiclink' }>(
+          '/auth/qr/resolve',
+          { qrPayload },
+          { silent: true, timeoutMs: 20000, omitAuth: true },
+        );
+        const { data, error } = await supabase.auth.verifyOtp({
+          token_hash: exchange.tokenHash,
+          type: exchange.type,
+        });
+        if (error || !data.session || !data.user) {
           if (previousActiveUserId) {
             try { await doSwitchAccount(previousActiveUserId); } catch { /* best-effort */ }
           }
-          const errMsg = err?.message || '';
-          const errMsgLc = errMsg.toLowerCase();
-          let errorMsg = errMsg || 'Validation failed. Contact support.';
-
-          if (errMsgLc.includes('account_not_in_school') || errMsgLc.includes('is not registered with')) {
-            errorMsg = `This account is not registered with ${SCHOOL_NAME}.\nContact your school administrator.`;
-          } else if (err?.code === 'SCHOOL_MISMATCH' || errMsgLc.includes('user does not belong to this school')) {
-            errorMsg = `This account does not belong to ${SCHOOL_NAME}.\nContact your school administrator.`;
-          } else if (errMsgLc.includes('account_locked')) {
-            errorMsg = `Your account has been locked. Contact ${SCHOOL_NAME} admin.`;
-          } else if (errMsgLc.includes('account_not_active')) {
-            errorMsg = `Your account is not active. Contact ${SCHOOL_NAME} admin.`;
-          }
-          return { error: errorMsg };
+          return { error: 'This login QR is no longer valid. Please request a new QR from your school.' };
         }
+        return completeAdditiveVaultLogin(data.session, previousActiveUserId);
+      } catch (error: any) {
+        if (previousActiveUserId) {
+          try { await doSwitchAccount(previousActiveUserId); } catch { /* best-effort */ }
+        }
+        return { error: mapQrExchangeError(error) };
       } finally {
         endInternalSwap();
       }
@@ -883,6 +992,7 @@ export const AuthService = {
     enqueueSwap(() => doSwitchAccount(userId)),
 
   signOut: async (): Promise<void> => {
+    clearStaffPortalSession();
     // 1. Remove from SecureStore
     await removeSecureItem(STORAGE_KEY);
     // 2. supabase.auth.signOut()
@@ -1028,6 +1138,17 @@ export const AuthService = {
         console.log('[AUTH_OUT]', 'school_mismatch', new Date().toISOString());
         await AuthService.signOut();
         return null;
+      }
+
+      if (!validatedUserMatchesLiveSession(refreshData.session, validatedUser)) {
+        if (prior?.validatedUser && validatedUserMatchesLiveSession(refreshData.session, prior.validatedUser)) {
+          console.warn('[AUTH_REFRESH] Ignoring impersonated identity; keeping signed-in account');
+          return persistSessionFromRefresh(refreshData.session, prior.validatedUser);
+        }
+        console.warn('[AUTH_REFRESH] Validated identity did not match the live session');
+        return prior?.validatedUser
+          ? persistSessionFromRefresh(refreshData.session, prior.validatedUser)
+          : null;
       }
 
       return persistSessionFromRefresh(refreshData.session, validatedUser);

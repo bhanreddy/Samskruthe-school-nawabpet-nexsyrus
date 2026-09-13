@@ -20,11 +20,13 @@ import { FeeService, FeeSummaryStatus } from '../../../src/services/feeService';
 import { ClassService, ClassInfo } from '../../../src/services/classService';
 import { useTheme } from '../../../src/hooks/useTheme';
 import LogoLoader from '../../../src/components/LogoLoader';
+import { useFeatures } from '../../../src/hooks/useFeatures';
+import FeeRecoveryView from '../../../src/components/FeeRecoveryView';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const FILTERS = ['All', 'Paid', 'Partial', 'Pending'] as const;
 type FilterType = typeof FILTERS[number];
-const VIEW_MODES = ['Students', 'Class Structures'] as const;
+const VIEW_MODES = ['Students', 'Fee Recovery', 'Class Structures'] as const;
 type ViewMode = typeof VIEW_MODES[number];
 const PAGE_LIMIT = 50;
 const CACHE_TTL_MS = 60 * 1000;
@@ -832,6 +834,7 @@ const structureStyles = StyleSheet.create({
 // ─── View Mode Pill ───────────────────────────────────────────────────────────
 const VIEW_MODE_META: Record<ViewMode, { icon: keyof typeof Ionicons.glyphMap; short: string }> = {
   Students: { icon: 'people-outline', short: 'Students' },
+  'Fee Recovery': { icon: 'shield-checkmark-outline', short: 'Recovery' },
   'Class Structures': { icon: 'layers-outline', short: 'Structures' },
 };
 
@@ -1377,6 +1380,9 @@ const filterPanelStyles = StyleSheet.create({
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function AccountsFees() {
   const { user } = useAuth();
+  const { isEnabled: isFeatureEnabled } = useFeatures();
+  const recoveryEnabled = isFeatureEnabled('nav.fees');
+  const visibleViewModes = useMemo(() => VIEW_MODES.filter(mode => mode !== 'Fee Recovery' || recoveryEnabled), [recoveryEnabled]);
   const { theme, isDark } = useTheme();
   const { shellActive } = useAccountsWebChrome();
   const styles = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
@@ -1740,7 +1746,7 @@ export default function AccountsFees() {
       )}
 
       <View style={styles.viewModeRow}>
-        {VIEW_MODES.map((mode) => (
+        {visibleViewModes.map((mode) => (
           <ViewModePill
             key={mode}
             label={mode}
@@ -1831,6 +1837,7 @@ export default function AccountsFees() {
   ), [
     activeFilter,
     activeView,
+    visibleViewModes,
     admissionNoInput,
     classes,
     clearStudentFilters,
@@ -1938,63 +1945,87 @@ export default function AccountsFees() {
       {!shellActive && <AdminHeader title="Fee Management" showBackButton />}
 
       {/* Search bar */}
-      <Animated.View
-        entering={FadeInDown.duration(400)}
-        style={[styles.searchWrapFrame, searchFocused && styles.searchWrapFrameFocused]}
-      >
-        <View style={[StyleSheet.absoluteFill, { borderRadius: 24, overflow: 'hidden' }]}>
-          <LinearGradient
-            colors={isDark ? ['rgba(255,255,255,0.12)', 'rgba(255,255,255,0)'] : ['rgba(255,255,255,0.55)', 'rgba(255,255,255,0)']}
-            start={{ x: 0, y: 0 }} end={{ x: 0.6, y: 0.9 }}
-            style={StyleSheet.absoluteFill}
-            pointerEvents="none"
-          />
-        </View>
+      {activeView !== 'Fee Recovery' && (
+        <Animated.View
+          entering={FadeInDown.duration(400)}
+          style={[styles.searchWrapFrame, searchFocused && styles.searchWrapFrameFocused]}
+        >
+          <View style={[StyleSheet.absoluteFill, { borderRadius: 24, overflow: 'hidden' }]}>
+            <LinearGradient
+              colors={isDark ? ['rgba(255,255,255,0.12)', 'rgba(255,255,255,0)'] : ['rgba(255,255,255,0.55)', 'rgba(255,255,255,0)']}
+              start={{ x: 0, y: 0 }} end={{ x: 0.6, y: 0.9 }}
+              style={StyleSheet.absoluteFill}
+              pointerEvents="none"
+            />
+          </View>
 
-        <View style={[styles.searchRecessedWell, searchFocused && styles.searchRecessedWellFocused]}>
-          <Ionicons
-            name="search"
-            size={18}
-            color={searchFocused ? '#3B82F6' : (isDark ? 'rgba(255,255,255,0.45)' : '#64748B')}
-            style={{ zIndex: 2 }}
-          />
-          <AppTextInput
-            style={[ds.inputInChrome, styles.searchInput, { zIndex: 2 }]}
-            placeholder={activeView === 'Students'
-              ? 'Search name, ID, phone…'
-              : 'Search class, fee type or year…'}
-            placeholderTextColor={isDark ? 'rgba(255,255,255,0.25)' : '#94A3B8'}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            onFocus={() => setSearchFocused(true)}
-            onBlur={() => setSearchFocused(false)}
-            returnKeyType="search"
-            onSubmitEditing={handleSearchSubmit}
-            blurOnSubmit={false}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={handleClearSearch} style={{ zIndex: 2 }} hitSlop={8}>
-              <Ionicons name="close-circle" size={18} color={isDark ? 'rgba(255,255,255,0.4)' : '#64748B'} />
-            </TouchableOpacity>
-          )}
-          {activeView === 'Students' ? (
-            <TouchableOpacity
-              onPress={handleSearchSubmit}
-              style={styles.searchAction}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.searchActionText}>Search</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      </Animated.View>
+          <View style={[styles.searchRecessedWell, searchFocused && styles.searchRecessedWellFocused]}>
+            <Ionicons
+              name="search"
+              size={18}
+              color={searchFocused ? '#3B82F6' : (isDark ? 'rgba(255,255,255,0.45)' : '#64748B')}
+              style={{ zIndex: 2 }}
+            />
+            <AppTextInput
+              style={[ds.inputInChrome, styles.searchInput, { zIndex: 2 }]}
+              placeholder={activeView === 'Students'
+                ? 'Search name, ID, phone…'
+                : 'Search class, fee type or year…'}
+              placeholderTextColor={isDark ? 'rgba(255,255,255,0.25)' : '#94A3B8'}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setSearchFocused(false)}
+              returnKeyType="search"
+              onSubmitEditing={handleSearchSubmit}
+              blurOnSubmit={false}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={handleClearSearch} style={{ zIndex: 2 }} hitSlop={8}>
+                <Ionicons name="close-circle" size={18} color={isDark ? 'rgba(255,255,255,0.4)' : '#64748B'} />
+              </TouchableOpacity>
+            )}
+            {activeView === 'Students' ? (
+              <TouchableOpacity
+                onPress={handleSearchSubmit}
+                style={styles.searchAction}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.searchActionText}>Search</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </Animated.View>
+      )}
 
-      {isListLoading ? (
+      {isListLoading && activeView !== 'Fee Recovery' ? (
         <View style={styles.loadingWrap}>
           <LogoLoader size={52} color="#3B82F6" />
           <Text style={styles.loadingText}>
             {activeView === 'Students' ? 'Loading fee data…' : 'Loading class fee structures…'}
           </Text>
+        </View>
+      ) : activeView === 'Fee Recovery' ? (
+        <View style={{ flex: 1 }}>
+          <View style={[styles.viewModeRow, { marginHorizontal: 16, marginTop: 10, marginBottom: 2 }]}>
+            {visibleViewModes.map((mode) => (
+              <ViewModePill
+                key={mode}
+                label={mode}
+                active={activeView === mode}
+                isDark={isDark}
+                onPress={() => setActiveView(mode)}
+              />
+            ))}
+          </View>
+          <FeeRecoveryView
+            onSelectStudent={(studentId) => {
+              router.push({
+                pathname: '/accounts/fees/details',
+                params: { studentId },
+              });
+            }}
+          />
         </View>
       ) : activeView === 'Students' ? (
         <FlatList

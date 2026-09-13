@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuth, getAuthSessionSnapshot } from './useAuth';
 import { getHomeRouteForRole } from '../utils/portalRoutes';
+import { getStaffPortalSession } from '../services/staffPortalSession';
 
 /**
  * useRequireRole
@@ -33,7 +34,7 @@ export function useRequireRole(...allowedRoles: string[]) {
         ? (effectiveUser.role as any).code
         : effectiveUser.role;
 
-    if (!allowedRoles.includes(roleCode)) {
+    if (!allowedRoles.includes(roleCode) && !getStaffPortalSession().actorUserId) {
       // Send the user to their own portal home (matches useAuthGuard). Avoids
       // a brief "Access Denied" flash when account switching navigates before
       // React state catches up, and is friendlier than /unauthorized for

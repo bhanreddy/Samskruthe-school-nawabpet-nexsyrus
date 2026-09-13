@@ -9,7 +9,7 @@ import { isStudentRole } from './roleHelpers';
  * typed `router.replace` / `<Redirect>` require. Do NOT add a `: string`
  * annotation here — it would widen the type and break every typed call site.
  */
-export function getHomeRouteForRole(roleCode: string | null | undefined) {
+export function getHomeRouteForRole(roleCode: string | null | undefined): any {
   switch (roleCode) {
     case 'admin':
     case 'principal':
@@ -22,6 +22,11 @@ export function getHomeRouteForRole(roleCode: string | null | undefined) {
       return '/staff/dashboard';
     case 'driver':
       return '/driver/dashboard';
+    case 'gate_keeper':
+    case 'gatekeeper':
+      return '/gatekeeper/dashboard';
+    case 'applicant':
+      return '/admission/dashboard';
     case 'parent':
     case 'student':
     default:
@@ -32,6 +37,8 @@ export function getHomeRouteForRole(roleCode: string | null | undefined) {
 /** Human-readable portal label shown in the account switcher. */
 export function getPortalLabelForRole(roleCode: string | null | undefined): string {
   switch (roleCode) {
+    case 'applicant':
+      return 'Applicant';
     case 'student':
     case 'parent':
       return 'Parent';
@@ -46,6 +53,9 @@ export function getPortalLabelForRole(roleCode: string | null | undefined): stri
       return 'Accounts';
     case 'driver':
       return 'Driver';
+    case 'gate_keeper':
+    case 'gatekeeper':
+      return 'Gate Keeper';
     default:
       return 'Account';
   }

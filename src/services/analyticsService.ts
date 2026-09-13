@@ -102,6 +102,12 @@ export interface SubjectPerformance {
 }
 
 // ── Staff ────────────────────────────────────────────────────────────────────
+export interface DepartmentStaffRow {
+  department: string;
+  count: number;
+  attendance_pct: number;
+}
+
 export interface StaffSummary {
   total_staff: number;
   active_staff: number;
@@ -109,6 +115,7 @@ export interface StaffSummary {
   avg_staff_attendance: number;
   new_joinings: number;
   resignations: number;
+  by_department?: DepartmentStaffRow[];
 }
 
 // ── Insights ────────────────────────────────────────────────────────────────
@@ -141,10 +148,11 @@ export const AnalyticsService = {
    * Fetch the full analytics snapshot for a given time range.
    * GET /admin/analytics?range=month|quarter|year
    */
-  async getAnalytics(range: TimeRange): Promise<AnalyticsData | null> {
+  async getAnalytics(range: TimeRange, force = false): Promise<AnalyticsData | null> {
     // Silent: useAnalytics/reports screens surface errors inline (retry cards),
     // not via the global apiClient "Network Error" modal.
-    const data = await apiClient.get<AnalyticsData | null>('/admin/analytics', { range }, { silent: true });
+    const params = force ? { range, force: 'true' } : { range };
+    const data = await apiClient.get<AnalyticsData | null>('/admin/analytics', params, { silent: true });
     return data;
   },
 

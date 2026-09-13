@@ -24,6 +24,7 @@ jest.mock('./supabaseConfig', () => ({
   supabase: {
     auth: {
       getSession: jest.fn(),
+      verifyOtp: jest.fn(),
       signInWithPassword: jest.fn(),
       updateUser: jest.fn(),
       refreshSession: jest.fn(),

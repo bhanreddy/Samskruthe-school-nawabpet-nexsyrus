@@ -746,18 +746,26 @@ function SubstitutionCard({
       </View>
 
       {covered ? (
-        <View style={styles.coverPanel}>
-          <View style={styles.coverCheck}>
-            <Ionicons name="checkmark" size={14} color="#FFFFFF" />
+        <View style={[styles.coverPanel, slot.is_auto_suggested ? { borderColor: '#F59E0B', borderWidth: 1 } : null]}>
+          <View style={[styles.coverCheck, slot.is_auto_suggested ? { backgroundColor: '#F59E0B' } : null]}>
+            <Ionicons name={slot.is_auto_suggested ? "flash" : "checkmark"} size={14} color="#FFFFFF" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.coverLabel}>COVERED BY</Text>
+            <Text style={[styles.coverLabel, slot.is_auto_suggested ? { color: '#D97706' } : null]}>
+              {slot.is_auto_suggested ? 'AUTO-SUGGESTED (LEAVE)' : 'COVERED BY'}
+            </Text>
             <Text style={styles.coverName}>{slot.substitute_teacher_name}</Text>
             {slot.reason ? <Text style={styles.coverReason} numberOfLines={1}>{slot.reason}</Text> : null}
           </View>
-          <TouchableOpacity onPress={onCancel} style={styles.cancelButton}>
-            <Ionicons name="close" size={16} color={c.danger} />
-          </TouchableOpacity>
+          {slot.is_auto_suggested ? (
+            <TouchableOpacity onPress={onAssign} style={[styles.cancelButton, { backgroundColor: 'rgba(245, 158, 11, 0.15)' }]} accessibilityLabel="Confirm or change suggested substitute">
+              <Ionicons name="checkmark-done" size={16} color="#D97706" />
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity onPress={onCancel} style={styles.cancelButton} accessibilityLabel="Cancel substitution">
+              <Ionicons name="close" size={16} color={c.danger} />
+            </TouchableOpacity>
+          )}
         </View>
       ) : (
         <TouchableOpacity onPress={onAssign} activeOpacity={0.82}>

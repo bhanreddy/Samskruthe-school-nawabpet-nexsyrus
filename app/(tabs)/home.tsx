@@ -43,11 +43,11 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import AdminHeaderCard from '../../src/components/AdminHeaderCard';
-import DashboardHero from '../../src/components/DashboardHero';
 import LogoLoader from '../../src/components/LogoLoader';
 import ScreenLayout from '../../src/components/ScreenLayout';
 import StudentHeader from '../../src/components/StudentHeader';
+import StudentHero from '../../src/components/student-hero/StudentHero';
+import { ParentAcademicCard } from '../../src/components/academic/ParentAcademicCard';
 import { SCHOOL_CONFIG } from '../../src/constants/schoolConfig';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useFeatures } from '../../src/hooks/useFeatures';
@@ -55,6 +55,8 @@ import type { FeatureKey } from '../../src/config/featureFlags';
 import { useStudentQuery } from '../../src/hooks/useStudentQuery';
 import { useTheme } from '../../src/hooks/useTheme';
 import { patchAccountMetadata } from '../../src/services/accountVault';
+import { notificationInboxService } from '../../src/services/notificationInboxService';
+import { setNotificationUnreadOverride, useNotificationUnreadOverride } from '../../src/services/notificationUnreadStore';
 import { StudentDashboardResponse } from '../../src/services/studentService';
 import { isStudentRole } from '../../src/utils/roleHelpers';
 import { AttendanceSummary } from '../../src/types/models';
@@ -112,7 +114,7 @@ interface HomeTab {
   /** Single shadow hue — keep tight, don't oversaturate */
   shadow: string;
   /** Feature-flag key gating this quick action (see useFeatures). */
-  feature: FeatureKey;
+  feature?: FeatureKey;
 }
 
 const homeTabs: HomeTab[] = [
@@ -133,6 +135,14 @@ const homeTabs: HomeTab[] = [
     grad: ['#312E81', '#4338CA', '#818CF8'], // Indigo 900, Indigo 700
     shadow: '#3730A3', // Indigo 800
     feature: 'quick.announcements',
+  },
+  {
+    key: 'updates',
+    translationKey: 'updates', title: 'Updates',
+    subtitleKey: 'dashboard.featureSubtitles.broadcast_updates',
+    image: require('../../assets/images/student-actions/updates-clay.png'),
+    grad: ['#4C1D95', '#6D28D9', '#C4B5FD'],
+    shadow: '#5B21B6',
   },
   {
     key: 'complaints',
@@ -206,20 +216,73 @@ const homeTabs: HomeTab[] = [
     shadow: '#047857',
     feature: 'topbar.lms',
   },
+  {
+    key: 'visitSchool',
+    translationKey: 'visitSchool',
+    title: 'Visit School',
+    subtitleKey: 'dashboard.featureSubtitles.visit_school',
+    image: require('../../assets/images/student-actions/visit-school-clay.png'),
+    grad: ['#047857', '#10B981', '#6EE7B7'],
+    shadow: '#065F46',
+  },
+  {
+    key: 'studentPickup',
+    translationKey: 'studentPickup',
+    title: 'Student Pickup',
+    subtitleKey: 'dashboard.featureSubtitles.student_pickup',
+    image: require('../../assets/images/student-actions/student-pickup-clay.png'),
+    grad: ['#1E1B4B', '#4F46E5', '#A5B4FC'],
+    shadow: '#312E81',
+  },
+  {
+    key: 'authorizedGuardians',
+    translationKey: 'authorizedGuardians',
+    title: 'Guardians',
+    subtitleKey: 'dashboard.featureSubtitles.authorized_guardians',
+    image: require('../../assets/images/student-actions/guardians-clay.png'),
+    grad: ['#0F766E', '#0D9488', '#5EEAD4'],
+    shadow: '#115E59',
+  },
+  {
+    key: 'calendar',
+    translationKey: 'academicCalendar',
+    title: 'Academic Calendar',
+    subtitleKey: 'dashboard.featureSubtitles.academic_calendar',
+    image: require('../../assets/images/student-actions/calendar-clay.png'),
+    grad: ['#1E3A8A', '#2563EB', '#93C5FD'],
+    shadow: '#1D4ED8',
+  },
+  {
+    key: 'events',
+    translationKey: 'paperlessEvents',
+    title: 'Paperless Event Desk',
+    subtitleKey: 'dashboard.featureSubtitles.event_desk',
+    image: require('../../assets/images/student-actions/event-desk-clay.png'),
+    grad: ['#3B0764', '#7E22CE', '#E9D5FF'],
+    shadow: '#6B21A8',
+  },
 ];
 
 const routeMap: Record<string, string> = {
   diary: '/Screen/diary',
   profile: '/Screen/profile',
   complaints: '/Screen/complaints',
+  helpdesk: '/Screen/helpdesk',
   busmap: '/Screen/busTracker',
   hostel: '/Screen/hostel',
   messages: '/Screen/announcements',
+  updates: '/updates',
   lifeValues: '/Screen/lifeValues',
   projects: '/Screen/scienceProjects',
   test: '/Screen/weekendTest',
   messenger: '/Screen/messages',
   lms: '/Screen/lms',
+  events: '/Screen/events',
+  calendar: '/Screen/calendar',
+  visitSchool: '/Screen/visitSchool',
+  studentPickup: '/Screen/studentPickup',
+  authorizedGuardians: '/Screen/authorizedGuardians',
+  visitorPass: '/Screen/visitorPass',
 };
 
 interface ClayViewProps {
@@ -1064,15 +1127,9 @@ const HomeScreen = () => {
   const { user, role } = useAuth();
   const { isEnabled, refresh: refreshFeatures } = useFeatures();
   const visibleQuickActions = homeTabs.filter((tab) => {
-    return isEnabled(tab.feature);
+    return !tab.feature || isEnabled(tab.feature);
   });
 
-  // Pick up admin toggles as soon as the home tab is focused.
-  useFocusEffect(
-    useCallback(() => {
-      refreshFeatures().catch(() => { });
-    }, [refreshFeatures]),
-  );
   const isStudentPortal = isStudentRole(user?.role?.code);
   const isWideWeb = IS_WEB && windowWidth >= 768;
 
@@ -1081,11 +1138,6 @@ const HomeScreen = () => {
   // not a module-level Dimensions snapshot — so 2-up tiles never stretch on desktop.
   const contentW = isWideWeb ? CONTENT_MAX_W : windowWidth;
   const cardW = (contentW - H_PAD * 2 - GAP) / 2;
-  const todayLabel = new Date().toLocaleDateString('en-IN', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  });
 
   const [svgMod, setSvgMod] = useState<ReactNativeSvgModule | null>(null);
   useEffect(() => { void import('react-native-svg').then(setSvgMod); }, []);
@@ -1097,6 +1149,28 @@ const HomeScreen = () => {
     2 * 60 * 1000,
     user?.userId,
     { enabled: !!user?.userId && isStudentPortal, persist: true }
+  );
+  const unreadOverride = useNotificationUnreadOverride();
+  const unreadCount = unreadOverride ?? Number(dash?.unread_notification_count || 0);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshFeatures().catch(() => { });
+      let cancelled = false;
+      const timer = setTimeout(() => {
+        void refetch().then((data) => {
+          if (cancelled) return;
+          const next = Number((data as StudentDashboardResponse | null)?.unread_notification_count);
+          if (!Number.isFinite(next) || next === 0) {
+            setNotificationUnreadOverride(null);
+          }
+        });
+      }, 350);
+      return () => {
+        cancelled = true;
+        clearTimeout(timer);
+      };
+    }, [refreshFeatures, refetch]),
   );
 
   const student = useMemo(() => dash?.profile ?? null, [dash]);
@@ -1154,10 +1228,6 @@ const HomeScreen = () => {
   const topNotice = freshNotices[0] ?? null;
   const belowNotice = topNotice ? (staleNotices[0] ?? null) : (staleNotices[0] ?? null);
 
-  const hr = new Date().getHours();
-  const gStr = hr < 12 ? t('dashboard.good_morning') : hr < 17 ? t('dashboard.good_afternoon') : t('dashboard.good_evening');
-  const gIco = hr < 12 ? '☀️' : hr < 17 ? '🌤️' : '🌙';
-
   const classSec = useMemo(() => {
     const ce = student?.current_enrollment;
     if (!ce) return t('studentHome.classNA');
@@ -1183,6 +1253,25 @@ const HomeScreen = () => {
       t('studentHome.studentFallback')
     );
   }, [student, user?.displayName, t]);
+
+  const studentFirstName = useMemo(
+    () => student?.first_name?.trim() || studentFullName.split(/\s+/)[0] || t('studentHome.studentFallback'),
+    [student?.first_name, studentFullName, t],
+  );
+
+  const heroClassLabel = useMemo(() => {
+    const ce = student?.current_enrollment;
+    if (!ce) return t('studentHome.classNA');
+    const cn = ce.class_name || ce.class_code || t('studentHome.classWord');
+    const sec = (ce.section_name || '').replace(/Section\s*/i, '').trim();
+    return `${t('studentHome.classWord')} ${cn}${sec ? ` ${sec}` : ''}`.trim();
+  }, [student, t]);
+
+  const inchargeLabel = useMemo(() => {
+    const teacher = student?.current_enrollment?.class_teacher?.trim();
+    if (!teacher) return t('studentHome.studentFallback');
+    return `${t('studentHome.incharge', 'Incharge')} · ${teacher}`;
+  }, [student, t]);
 
   useEffect(() => {
     if (!user?.userId || !student) return;
@@ -1211,36 +1300,29 @@ const HomeScreen = () => {
           {refreshing && <View style={S.loaderRow}><LogoLoader size={28} /></View>}
 
           {/* ── HERO ── */}
-          <View style={[S.hero, { paddingTop: HEADER_HEIGHT + 14, backgroundColor: P.bg }]}>
+          <View style={[S.hero, { paddingTop: HEADER_HEIGHT + 6, backgroundColor: '#15245C' }]}>
             <View
               style={[
                 S.heroOuter,
                 {
                   maxWidth: isWideWeb ? CONTENT_MAX_W : undefined,
                   alignSelf: isWideWeb ? 'center' : 'stretch',
-                  paddingHorizontal: isWideWeb ? 0 : H_PAD,
                 },
               ]}
             >
-              <DashboardHero
-                eyebrow={`${gIco}  ${todayLabel}`.toUpperCase()}
-                greeting={gStr}
-                name={studentFullName}
-                subtitle={classSec}
-                stacks
-                showFullName
-                card={
-                  <AdminHeaderCard
-                    compact
-                    embedded
-                    displayName={studentFullName}
-                    roleLabel={classSec}
-                    staffCode={student?.current_enrollment?.roll_number ? `Roll ${student.current_enrollment.roll_number}` : undefined}
-                    photoUrl={student?.photo_url || user?.photoUrl}
-                    portalBadge="STUDENT"
-                    onAccountSwitched={onRefresh}
-                  />
-                }
+              <StudentHero
+                firstName={studentFirstName}
+                classLabel={heroClassLabel}
+                inchargeLabel={inchargeLabel}
+                photoUrl={student?.photo_url || user?.photoUrl}
+                unreadCount={unreadCount}
+                slides={dash?.hero_slides ?? []}
+                stories={dash?.school_stories ?? []}
+                onViewNotifications={() => {
+                  void notificationInboxService.markAllRead();
+                  router.push('/notifications' as any);
+                }}
+                onAccountSwitched={onRefresh}
               />
             </View>
           </View>
@@ -1268,6 +1350,7 @@ const HomeScreen = () => {
               </Animated.View>
             )}
 
+
             {/* 2. Fresh notice */}
             {topNotice && (
               <Animated.View entering={FadeInUp.delay(240).duration(700).springify()}>
@@ -1294,7 +1377,7 @@ const HomeScreen = () => {
                         tab={{
                           ...item,
                           title: item.translationKey ? (t(item.translationKey) as string) : item.title,
-                          subtitle: t(item.subtitleKey) as string,
+                          subtitle: item.subtitleKey ? (t(item.subtitleKey) as string) : (item as any).subtitle || 'Gate Access',
                         }}
                         isDark={isDark}
                         cardWidth={cardW}
@@ -1326,6 +1409,9 @@ const HomeScreen = () => {
                     }
                   }}
                 />
+                <View style={{ marginTop: 12 }}>
+                  <ParentAcademicCard studentId={student?.id} />
+                </View>
               </Animated.View>
             )}
 
@@ -1352,7 +1438,7 @@ const S = StyleSheet.create({
   scroll: { paddingBottom: 80 },
   loaderRow: { alignItems: 'center', paddingVertical: 18 },
 
-  hero: { paddingBottom: 18, overflow: 'hidden' },
+  hero: { paddingBottom: 10, overflow: 'hidden' },
   heroOuter: { width: '100%' },
 
   body: {

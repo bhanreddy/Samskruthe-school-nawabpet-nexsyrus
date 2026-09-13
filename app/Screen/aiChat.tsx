@@ -24,7 +24,7 @@ type Message = {
 // --- Components ---
 
 // 1. Message Bubble Component 
-const MessageBubble = React.memo(({ item }: { item: Message; }) => {
+const MessageBubble = React.memo(function MessageBubble({ item }: { item: Message; }) {
   const isUser = item.sender === 'user';
 
   return (
@@ -169,10 +169,10 @@ export default function AIChatScreen() {
         <MaterialIcons name="auto-awesome" size={48} color="#4F46E5" />
       </View>
       <Text style={styles.emptyTitle}>Hi, Student! 👋</Text>
-      <Text style={styles.emptySubtitle}>I'm your AI study assistant. Ask me anything about your subjects.</Text>
+      <Text style={styles.emptySubtitle}>I&apos;m your AI study assistant. Ask me anything about your subjects.</Text>
       <View style={styles.suggestionContainer}>
         <TouchableOpacity style={styles.suggestionChip} onPress={() => setInput("Explain Newton's laws")}>
-          <Text style={styles.suggestionText}>🍎 Explain Newton's laws</Text>
+          <Text style={styles.suggestionText}>🍎 Explain Newton&apos;s laws</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.suggestionChip} onPress={() => setInput("Solve a quadratic equation")}>
           <Text style={styles.suggestionText}>➗ Solve quadratic equation</Text>

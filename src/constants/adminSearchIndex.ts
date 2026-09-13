@@ -21,6 +21,16 @@ export interface AdminSearchEntry {
 /** Secondary admin destinations not listed in the primary nav grid. */
 const EXTRA_PAGES: Omit<AdminSearchEntry, 'kind'>[] = [
   {
+    id: 'page-academic-planner',
+    title: 'Academic Planner',
+    subtitle: 'Curriculum, teaching plans, and command center',
+    route: '/admin/academic-planner',
+    icon: 'map-outline',
+    category: 'Academic',
+    keywords: ['curriculum', 'syllabus', 'today', 'progress', 'recovery', 'command center'],
+    permission: 'academic_planner.view',
+  },
+  {
     id: 'page-students',
     title: 'Students',
     subtitle: 'Browse and manage student records',
@@ -37,6 +47,26 @@ const EXTRA_PAGES: Omit<AdminSearchEntry, 'kind'>[] = [
     icon: 'person-add-outline',
     category: 'Students',
     keywords: ['new student', 'admission', 'enroll', 'register'],
+  },
+  {
+    id: 'page-admissions',
+    title: 'Admissions Pipeline',
+    subtitle: 'Enquiry to student conversion command center',
+    route: '/admin/admissions',
+    icon: 'person-add-outline',
+    category: 'Students',
+    keywords: ['enquiry', 'applicant', 'admission', 'waitlist', 'interview', 'documents'],
+    permission: 'admissions.view',
+  },
+  {
+    id: 'page-admissions-analytics',
+    title: 'Admissions Analytics',
+    subtitle: 'Funnel, sources, SLA and capacity',
+    route: '/admin/admissions/analytics',
+    icon: 'bar-chart-outline',
+    category: 'Students',
+    keywords: ['conversion', 'funnel', 'enquiry', 'waitlist'],
+    permission: 'admissions.view',
   },
   {
     id: 'page-bulk-student',
@@ -111,6 +141,26 @@ const EXTRA_PAGES: Omit<AdminSearchEntry, 'kind'>[] = [
     keywords: ['alerts', 'inbox', 'bell'],
   },
   {
+    id: 'page-popup-manager',
+    title: 'Popup Manager',
+    subtitle: 'Create in-app popups and missed updates',
+    route: '/admin/popup-manager',
+    icon: 'albums-outline',
+    category: 'Comms',
+    keywords: ['popup', 'banner', 'announcement', 'in-app', 'campaign'],
+    permission: 'popups.create',
+  },
+  {
+    id: 'page-birthday-celebrations',
+    title: 'Birthday Celebrations',
+    subtitle: 'Configure student and staff birthday banners',
+    route: '/admin/hero-slides',
+    icon: 'albums-outline',
+    category: 'Comms',
+    keywords: ['birthday', 'celebration', 'hero slides', 'banner', 'carousel'],
+    permission: 'admin.manage',
+  },
+  {
     id: 'page-policy',
     title: 'Policies',
     subtitle: 'School policy documents',
@@ -137,6 +187,26 @@ const EXTRA_PAGES: Omit<AdminSearchEntry, 'kind'>[] = [
     category: 'Ops',
     keywords: ['bus', 'routes', 'upload'],
   },
+  {
+    id: 'page-visitor-live',
+    title: 'Live Campus Visitors',
+    subtitle: 'Who is inside campus right now',
+    route: '/admin/visitors/live',
+    icon: 'people-outline',
+    category: 'Security',
+    keywords: ['gate', 'visitor', 'check-in', 'overstay'],
+    permission: 'visitors.view',
+  },
+  {
+    id: 'page-visitor-approvals',
+    title: 'Visitor Approvals',
+    subtitle: 'Pending campus visit requests',
+    route: '/admin/visitors/approvals',
+    icon: 'checkbox-outline',
+    category: 'Security',
+    keywords: ['visitor', 'approve', 'gate pass'],
+    permission: 'visitors.manage',
+  },
 ];
 
 /** Suggested shortcuts shown when the query is empty. */
@@ -146,7 +216,7 @@ export const ADMIN_SEARCH_SUGGESTIONS: { title: string; query: string; icon: Adm
   { title: 'Timetable', query: 'timetable', icon: 'calendar-outline' },
   { title: 'Staff', query: 'staff', icon: 'person-outline' },
   { title: 'Reports', query: 'reports', icon: 'bar-chart-outline' },
-  { title: 'Transport', query: 'transport', icon: 'bus-outline' },
+  { title: 'Visitors', query: 'visitor', icon: 'shield-checkmark-outline' },
 ];
 
 /**

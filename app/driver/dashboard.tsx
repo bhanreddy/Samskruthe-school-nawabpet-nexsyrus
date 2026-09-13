@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, StatusBar, Refres
 import { alertCompat } from '../../src/utils/crossPlatformAlert';
 import ScreenLayout from '../../src/components/ScreenLayout';
 import StudentHeader from '../../src/components/StudentHeader';
+import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import NetInfo from '@react-native-community/netinfo';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -117,6 +118,7 @@ const STATUS_CONFIG: Record<StopStatus, { bg: string; colorKey: 'info' | 'warnin
    ████  DRIVER DASHBOARD  ████
    ════════════════════════════════════════════════════════════ */
 export default function DriverDashboard() {
+  const router = useRouter();
   const { user } = useAuth();
   const { t, i18n } = useTranslation();
   const { theme } = useTheme();
@@ -748,6 +750,27 @@ export default function DriverDashboard() {
             )}
           </LinearGradient>
         </Animated.View>
+
+        <TouchableOpacity
+          onPress={() => router.push('/driver/updates')}
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            marginBottom: 16,
+            padding: 14,
+            borderRadius: 16,
+            backgroundColor: theme.colors.surface,
+            borderWidth: 1,
+            borderColor: theme.colors.border,
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Open important updates"
+        >
+          <Ionicons name="notifications-circle-outline" size={20} color={theme.colors.primary} />
+          <Text style={{ flex: 1, fontWeight: '700', color: theme.colors.textStrong }}>Updates</Text>
+          <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
+        </TouchableOpacity>
 
         {isTracking && locationSharingPaused &&
           <View style={s.pauseAlert}>

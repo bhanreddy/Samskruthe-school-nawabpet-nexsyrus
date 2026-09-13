@@ -96,6 +96,7 @@ const UnifiedLoginScreen: React.FC = () => {
   };
 
   const [loading, setLoading] = useState(false);
+  const [loginMethod, setLoginMethod] = useState<'email' | 'qr'>('email');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -517,10 +518,41 @@ const UnifiedLoginScreen: React.FC = () => {
                     ? 'Use another account'
                     : (t('welcomeBack') || 'Welcome back')
                 }
-                subtitle={t('signInToContinue') || 'Sign in to continue'}
+                subtitle={
+                  loginMethod === 'qr'
+                    ? (t('qrLogin.subtitle', 'Scan your school-issued login card') as string)
+                    : (t('signInToContinue') || 'Sign in to continue')
+                }
                 icon="shield-checkmark-outline"
               />
 
+              <View style={styles.loginMethodRow}>
+                <TouchableOpacity
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: loginMethod === 'email' }}
+                  onPress={() => setLoginMethod('email')}
+                  style={[styles.loginMethodTab, loginMethod === 'email' && styles.loginMethodTabActive]}
+                >
+                  <Text style={[styles.loginMethodText, loginMethod === 'email' && styles.loginMethodTextActive]}>
+                    {t('qrLogin.emailLogin', 'Email Login')}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: loginMethod === 'qr' }}
+                  onPress={() => {
+                    setLoginMethod('qr');
+                    router.push('/qr-login' as never);
+                  }}
+                  style={[styles.loginMethodTab, loginMethod === 'qr' && styles.loginMethodTabActive]}
+                >
+                  <Text style={[styles.loginMethodText, loginMethod === 'qr' && styles.loginMethodTextActive]}>
+                    {t('qrLogin.qrLogin', 'QR Login')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {loginMethod === 'email' ? <>
               {/* Email */}
               <View style={styles.fieldGap}>
                 <FloatingInput
@@ -596,6 +628,27 @@ const UnifiedLoginScreen: React.FC = () => {
                   label={t('signIn') || 'Sign In'}
                 />
               </View>
+
+              <View style={styles.qrDividerRow}>
+                <View style={styles.qrDivider} />
+                <Text style={styles.qrDividerText}>{t('qrLogin.or', 'OR')}</Text>
+                <View style={styles.qrDivider} />
+              </View>
+              </> : null}
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityLabel={t('qrLogin.scanCta', 'Scan QR to Login')}
+                disabled={loading || !!switchingId}
+                onPress={() => router.push('/qr-login' as never)}
+                style={styles.qrLoginButton}
+              >
+                <View style={styles.qrLoginIcon}><Ionicons name="scan-outline" size={21} color={C.accent} /></View>
+                <View style={styles.qrLoginCopy}>
+                  <Text style={styles.qrLoginTitle}>{t('qrLogin.scanCta', 'Scan QR to Login')}</Text>
+                  <Text style={styles.qrLoginSubtitle}>{t('qrLogin.scanHint', 'Quick and secure access with your private school card')}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={19} color={C.inkSoft} />
+              </TouchableOpacity>
 
               {/* Trust strip */}
               <Animated.View
@@ -949,8 +1002,78 @@ const getStyles = (C: ReturnType<typeof useLoginTheme>) => StyleSheet.create({
 
   // ── Sign In Button ────────────────────────────────────────────────────────
   btnWrap: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
+  loginMethodRow: {
+    flexDirection: 'row',
+    backgroundColor: C.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(107,47,160,0.06)',
+    borderRadius: 14,
+    padding: 4,
+    marginBottom: 16,
+  },
+  loginMethodTab: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loginMethodTabActive: {
+    backgroundColor: C.isDark ? 'rgba(181,126,220,0.22)' : '#FFFFFF',
+    ...Platform.select({
+      ios: { shadowColor: '#5B21B6', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
+      android: { elevation: 1 },
+      default: {},
+    }),
+  },
+  loginMethodText: {
+    color: C.inkSoft,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  loginMethodTextActive: {
+    color: C.ink,
+    fontWeight: '800',
+  },
+  qrDividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 14,
+  },
+  qrDivider: {
+    height: 1,
+    flex: 1,
+    backgroundColor: C.isDark ? 'rgba(255,255,255,0.09)' : C.borderNeutral,
+  },
+  qrDividerText: {
+    color: C.inkSoft,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+  },
+  qrLoginButton: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 13,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: C.isDark ? 'rgba(181,126,220,0.28)' : 'rgba(107,47,160,0.20)',
+    backgroundColor: C.isDark ? 'rgba(181,126,220,0.08)' : 'rgba(107,47,160,0.045)',
+    marginBottom: 18,
+  },
+  qrLoginIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: C.isDark ? 'rgba(181,126,220,0.15)' : 'rgba(107,47,160,0.10)',
+  },
+  qrLoginCopy: { flex: 1, marginLeft: 11 },
+  qrLoginTitle: { color: C.ink, fontSize: 14, fontWeight: '800' },
+  qrLoginSubtitle: { color: C.inkSoft, fontSize: 11, marginTop: 2 },
 
   // ── Trust strip ───────────────────────────────────────────────────────────
   trustStrip: {

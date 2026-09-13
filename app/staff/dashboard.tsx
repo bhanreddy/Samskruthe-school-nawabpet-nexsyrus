@@ -23,12 +23,19 @@ import * as Haptics from '@/src/utils/haptics';
 import StaffHeader from '@/src/components/StaffHeader';
 import AdminHeaderCard from '@/src/components/AdminHeaderCard';
 import DashboardHero from '@/src/components/DashboardHero';
+import HeroSlidesCarousel from '@/src/components/hero-slides/HeroSlidesCarousel';
+import SchoolStoriesStrip from '@/src/components/school-stories/SchoolStoriesStrip';
 import ViewAsBanner from '@/src/components/ViewAsBanner';
 import { useEffectiveStaffId } from '@/src/hooks/useEffectiveStaffId';
 import { usePersistedSWR } from '@/src/hooks/usePersistedSWR';
 import { useStaffPortalConfig } from '@/src/hooks/useStaffPortalConfig';
 import { Staff, StaffService } from '@/src/services/staffService';
+import { schoolHeroSlidesService, type HeroSlideItem } from '@/src/services/schoolHeroSlidesService';
+import { schoolStoriesService, type SchoolStoryAuthor } from '@/src/services/schoolStoriesService';
+import StaffAttendanceQuickCard from '@/src/components/StaffAttendanceQuickCard';
+import { UpcomingEventsWidget } from '@/src/components/calendar/UpcomingEventsWidget';
 import { clayTokens } from '@/src/styles/clayTokens';
+import { usePopupUnreadCount } from '@/src/features/popups/popupUnreadStore';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 const MENU_GAP = 16;
@@ -659,6 +666,16 @@ const MENU_CONFIGS: Record<string, MenuConfig> = {
     shimmerColor: 'rgba(129,140,248,0.38)',
     patternType: 'arc',
   },
+  stories: {
+    icon: <Ionicons name="ellipse" size={26} color="#fff" />,
+    grad: ['#FBBF24', '#F59E0B', '#B45309'] as const,
+    accentLight: '#FDE68A',
+    accentBar: ['#FDE68A', '#F59E0B'],
+    shadowColor: '#B45309',
+    category: 'UPDATES',
+    shimmerColor: 'rgba(251,191,36,0.38)',
+    patternType: 'rings',
+  },
   messages: {
     icon: <Ionicons name="chatbubbles" size={26} color="#fff" />,
     grad: ['#818CF8', '#6366F1', '#4338CA'] as const,
@@ -668,6 +685,16 @@ const MENU_CONFIGS: Record<string, MenuConfig> = {
     category: 'COMMS',
     shimmerColor: 'rgba(129,140,248,0.36)',
     patternType: 'dots',
+  },
+  academic: {
+    icon: <Ionicons name="book" size={26} color="#fff" />,
+    grad: ['#818CF8', '#4F46E5', '#312E81'] as const,
+    accentLight: '#C7D2FE',
+    accentBar: ['#C7D2FE', '#6366F1'],
+    shadowColor: '#4F46E5',
+    category: 'ACADEMICS',
+    shimmerColor: 'rgba(129,140,248,0.38)',
+    patternType: 'arc',
   },
   diary: {
     icon: <FontAwesome5 name="book" size={26} color="#fff" />,
@@ -907,9 +934,15 @@ function getStaffClayColors(configKey: string, isDark: boolean) {
   if (configKey === 'notices') {
     bg = isDark ? '#2E3FA7' : '#3D5AFE'; // Vibrant Indigo
     shadowColor = isDark ? '#1C2570' : '#1A237E';
+  } else if (configKey === 'stories') {
+    bg = isDark ? '#B45309' : '#F59E0B';
+    shadowColor = isDark ? '#78350F' : '#B45309';
   } else if (configKey === 'messages') {
     bg = isDark ? '#0070A3' : '#00B0FF'; // Electric Cyan
     shadowColor = isDark ? '#003E5C' : '#01579B';
+  } else if (configKey === 'academic') {
+    bg = isDark ? '#3730A3' : '#4F46E5';
+    shadowColor = isDark ? '#1E1B4B' : '#312E81';
   } else if (configKey === 'diary') {
     bg = isDark ? '#5033B3' : '#7C4DFF'; // Vivid Violet
     shadowColor = isDark ? '#2F187A' : '#4A148C';
@@ -1252,8 +1285,9 @@ export default function StaffDashboard() {
   const { user } = useAuth();
   const { isDark } = useTheme();
   const t = isDark ? D.dark : D.light;
-  const { staffId, isViewingAsAdmin, viewAsName, userId: viewAsUserId } = useEffectiveStaffId();
+  const { staffId, isViewingAsAdmin, viewAsName, userId: viewAsUserId, actorUserId } = useEffectiveStaffId();
   const { payslipsEnabled } = useStaffPortalConfig();
+  const popupUnread = usePopupUnreadCount();
   const [viewedStaff, setViewedStaff] = useState<Staff | null>(null);
 
   useEffect(() => {
@@ -1304,6 +1338,26 @@ export default function StaffDashboard() {
   });
   const loading = metricsLoading && !data;
 
+  const { data: heroSlides, refetch: refetchSlides } = usePersistedSWR<HeroSlideItem[]>({
+    cacheKey: 'staff-hero-slides',
+    userId: user?.userId,
+    ttlMs: 120_000,
+    persist: !isViewingAsAdmin,
+    enabled: !!user,
+    revalidateOnMount: true,
+    fetcher: () => schoolHeroSlidesService.listActive(),
+  });
+
+  const { data: schoolStories, refetch: refetchStories } = usePersistedSWR<SchoolStoryAuthor[]>({
+    cacheKey: 'staff-school-stories',
+    userId: user?.userId,
+    ttlMs: 60_000,
+    persist: !isViewingAsAdmin,
+    enabled: !!user,
+    revalidateOnMount: true,
+    fetcher: () => schoolStoriesService.list(),
+  });
+
   useFocusEffect(useCallback(() => {
     // Only the teacher's own home screen should treat hardware back as "exit app".
     // When an admin is viewing this as another staff member's portal, this screen
@@ -1316,8 +1370,13 @@ export default function StaffDashboard() {
 
   const menuItems = useMemo(() => [
     { title: 'Notices', subtitle: 'School updates', configKey: 'notices', route: '/staff/notices' },
+    { title: 'Updates', subtitle: 'Important popups', configKey: 'notices', route: '/staff/updates', badge: popupUnread ? `${popupUnread}` : undefined },
+    { title: 'School Stories', subtitle: 'Post 24-hour rings', configKey: 'stories', route: '/staff/school-stories' },
     { title: 'Messages', subtitle: 'In-app chat', configKey: 'messages', route: '/staff/messages' },
+    { title: 'Academic Today', subtitle: "Today's topic in 1 tap", configKey: 'academic', route: '/staff/academic-today' },
     { title: 'Diary', subtitle: 'Photo, voice & homework', configKey: 'diary', route: '/staff/diary' },
+    { title: 'Event Ops', subtitle: 'QR, tasks, attendance', configKey: 'academic', route: '/staff/events' },
+    { title: 'Admissions', subtitle: 'Enquiry pipeline', configKey: 'academic', route: '/staff/admissions' },
     { title: 'Timetable', subtitle: 'Class schedule', configKey: 'timetable', route: '/staff/timetable' },
     { title: 'Student Portfolio', subtitle: 'First-class profiles', configKey: 'portfolio', route: '/staff/student-portfolio' },
     { title: 'Roll Numbers', subtitle: 'Set your class order', configKey: 'rollNumbers', route: '/staff/roll-numbers' },
@@ -1326,16 +1385,17 @@ export default function StaffDashboard() {
     { title: 'Results', subtitle: 'Enter & view marks', configKey: 'results', route: '/staff/results' },
     { title: 'Progress Cards', subtitle: 'Class-teacher card assistant', configKey: 'results', route: '/staff/progress-card-assistant' },
     { title: 'Complaints', subtitle: 'Student issues', configKey: 'complaints', route: '/staff/complaints' },
+    { title: 'Fine Request', subtitle: 'Damage & penalties', configKey: 'complaints', route: '/staff/fine-request' },
     { title: 'LMS', subtitle: 'Upload resources', configKey: 'lms', route: '/staff/lms-upload' },
     ...(payslipsEnabled ? [{ title: 'Payslips', subtitle: 'Salary & docs', configKey: 'payslips', route: '/staff/payslip' }] : []),
-  ], [data?.pendingLeaves, payslipsEnabled]);
+  ], [data?.pendingLeaves, payslipsEnabled, popupUnread]);
 
   const navigateToStaffRoute = useCallback((route: string) => {
     // Route name = last path segment (e.g. '/staff/manage-students' -> 'manage-students'),
     // which is the screen name registered in app/staff/_layout.tsx.
     const screen = route.replace(/^\/staff\//, '').split('?')[0];
     const params = isViewingAsAdmin
-      ? { staffId: staffId || '', viewAsName: viewAsName || '', viewAsUserId: viewAsUserId || '' }
+      ? { staffId: staffId || '', viewAsName: viewAsName || '', viewAsUserId: viewAsUserId || '', viewAsActorId: actorUserId || '' }
       : undefined;
 
     // Switch tabs via the tab navigator's own navigation object — the same call
@@ -1344,7 +1404,7 @@ export default function StaffDashboard() {
     // old band-aid, but it hard-404s on hosts without SPA fallback. jumpTo-style
     // navigation stays client-side and lands on the exact screen on every platform.
     (navigation as any).navigate(screen, params);
-  }, [isViewingAsAdmin, navigation, staffId, viewAsName, viewAsUserId]);
+  }, [isViewingAsAdmin, navigation, staffId, viewAsName, viewAsUserId, actorUserId]);
 
   const scrollY = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler({
@@ -1361,8 +1421,8 @@ export default function StaffDashboard() {
 
   const handleRefresh = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    await refetch();
-  }, [refetch]);
+    await Promise.all([refetch(), refetchSlides(), refetchStories()]);
+  }, [refetch, refetchSlides, refetchStories]);
 
   const firstName = (isViewingAsAdmin ? viewAsName : user?.displayName)?.split(' ')[0] || 'Teacher';
 
@@ -1409,9 +1469,39 @@ export default function StaffDashboard() {
       >
         {isViewingAsAdmin && <ViewAsBanner name={viewAsName} />}
         <HeroBanner name={firstName} isDark={isDark} card={headerProfileCard} />
+        <HeroSlidesCarousel
+          slides={heroSlides ?? []}
+          dotTone={isDark ? 'onDark' : 'onLight'}
+          style={{ marginBottom: 16 }}
+        />
+        <SchoolStoriesStrip
+          stories={schoolStories ?? []}
+          canAdd={!isViewingAsAdmin}
+          addPhotoUrl={isViewingAsAdmin ? viewedStaff?.photo_url : user?.photoUrl}
+          tone={isDark ? 'onDark' : 'onLight'}
+          style={{ marginBottom: 20 }}
+          onPublished={() => refetchStories()}
+        />
         {!!data?.pendingLeaves && (
           <LeaveAlert count={data.pendingLeaves} onPress={handleLeavesPress} isDark={isDark} />
         )}
+        {!isViewingAsAdmin && <StaffAttendanceQuickCard isDark={isDark} />}
+        <UpcomingEventsWidget role="staff" />
+        <SectionLabel label="ACADEMIC TODAY" isDark={isDark} />
+        <TouchableOpacity
+          onPress={() => navigateToStaffRoute('/staff/academic-today')}
+          style={{
+            backgroundColor: isDark ? 'rgba(99,102,241,0.16)' : '#EEF2FF',
+            borderRadius: 20,
+            padding: 16,
+            marginBottom: 16,
+          }}
+        >
+          <Text style={{ color: '#4F46E5', fontWeight: '800' }}>Continue teaching</Text>
+          <Text style={{ color: isDark ? '#CBD5E1' : '#475569', marginTop: 4 }}>
+            Today's topic is already mapped from timetable and curriculum.
+          </Text>
+        </TouchableOpacity>
         <SectionLabel label="TODAY'S CLASS" isDark={isDark} />
         <AttendanceHero
           data={data}

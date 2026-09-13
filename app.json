@@ -2,7 +2,7 @@
   "expo": {
     "name": "Geetanjali High School Maddur",
     "slug": "geetanjalihighschoolmaddur",
-    "version": "3.1.2",
+    "version": "4.1.8",
     "platforms": [
       "android",
       "ios",
@@ -21,6 +21,7 @@
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
+        "NSFaceIDUsageDescription": "Staff attendance requires biometric authentication to securely sign and verify your check-in and check-out on your registered device.",
         "UIBackgroundModes": [
           "fetch",
           "remote-notification",
@@ -36,13 +37,11 @@
       "jsEngine": "hermes",
       "versionCode": 5,
       "googleServicesFile": "./google-services.json",
-      "enableShrinkResources": true,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon-v2.png",
         "backgroundColor": "#E6F4FE",
         "monochromeImage": "./assets/images/icon-v2.png"
       },
-      "useNextNotificationsApi": true,
       "permissions": [
         "INTERNET",
         "ACCESS_NETWORK_STATE",
@@ -53,6 +52,7 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
+        "CAMERA",
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_LOCATION"
       ]
@@ -80,6 +80,13 @@
       ],
       "expo-router",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow SchoolIMS to use the camera to scan your private school-issued login QR code.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/icon.png",
@@ -92,7 +99,7 @@
         {
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true,
-          "locationWhenInUsePermission": "This app shares the school bus location with parents while a trip is in progress.",
+          "locationWhenInUsePermission": "This app uses your location to verify staff attendance on campus and to share the school bus location during active trips.",
           "locationAlwaysAndWhenInUsePermission": "This app shares the school bus location with parents while a trip is in progress, including when the screen is off."
         }
       ],
@@ -118,7 +125,9 @@
       "@react-native-community/datetimepicker",
       "@maplibre/maplibre-react-native",
       "./plugins/withManifestMerger.js",
-      "./plugins/withAndroidSounds.js"
+      "./plugins/withAndroidSounds.js",
+      "expo-font",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true

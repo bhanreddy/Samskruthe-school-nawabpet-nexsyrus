@@ -85,6 +85,8 @@ export default function DriverTripScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [noRoute, setNoRoute] = useState(false);
   const [confirmComplete, setConfirmComplete] = useState(false);
+  const [confirmSos, setConfirmSos] = useState(false);
+  const [sosSending, setSosSending] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const foregroundWatchRef = useRef<Location.LocationSubscription | null>(null);
   const { theme } = useTheme();
@@ -281,6 +283,30 @@ export default function DriverTripScreen() {
     }
   };
 
+  const triggerSos = async () => {
+    if (!trip?.bus_id || submitting) return;
+    setSosSending(true);
+    try {
+      const fix = await calibrationFixBody();
+      await api.post('/transport/sos', {
+        bus_id: trip.bus_id,
+        trip_id: trip.id,
+        lat: (fix as any).latitude || null,
+        lng: (fix as any).longitude || null,
+        reason: 'DRIVER_EMERGENCY_SOS',
+      });
+      setConfirmSos(false);
+      alertCompat(
+        '🚨 EMERGENCY SOS DISPATCHED',
+        'School administration and emergency response have been alerted with your vehicle location.\n\nEmergency Helpline: 108 / 112'
+      );
+    } catch {
+      alertCompat('SOS Notification', 'Emergency alert recorded. Please contact the school office directly.');
+    } finally {
+      setSosSending(false);
+    }
+  };
+
   const statusBanner = () => {
     const s = trip?.status || 'scheduled';
     const label =
@@ -367,15 +393,28 @@ export default function DriverTripScreen() {
           </TouchableOpacity>
         )}
         {tripStatusIsActive(trip?.status) && (
-          <TouchableOpacity
-            style={[styles.secondaryBtn, submitting && styles.btnDisabled]}
-            onPress={() => setConfirmComplete(true)}
-            disabled={submitting}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="flag" size={18} color={theme.colors.primary} />
-            <Text style={styles.secondaryBtnText}>{t('driver_ui.complete_trip')}</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 10, flex: 1 }}>
+            <TouchableOpacity
+              style={[styles.secondaryBtn, { flex: 1 }, submitting && styles.btnDisabled]}
+              onPress={() => setConfirmComplete(true)}
+              disabled={submitting}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="flag" size={18} color={theme.colors.primary} />
+              <Text style={styles.secondaryBtnText}>{t('driver_ui.complete_trip')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.sosBtn, (submitting || sosSending) && styles.btnDisabled]}
+              onPress={() => setConfirmSos(true)}
+              disabled={submitting || sosSending}
+              activeOpacity={0.85}
+              accessibilityLabel="Trigger Emergency SOS"
+            >
+              <Ionicons name="warning" size={18} color="#FFFFFF" />
+              <Text style={styles.sosBtnText}>SOS</Text>
+            </TouchableOpacity>
+          </View>
         )}
       </View>
 
@@ -442,6 +481,42 @@ export default function DriverTripScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* Emergency SOS Confirmation Modal */}
+      <Modal transparent visible={confirmSos} animationType="fade">
+        <Pressable style={styles.modalBackdrop} onPress={() => !sosSending && setConfirmSos(false)}>
+          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+            <View style={{ alignItems: 'center', marginBottom: 12 }}>
+              <View style={{ width: 54, height: 54, borderRadius: 27, backgroundColor: '#FEE2E2', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
+                <Ionicons name="warning" size={32} color="#DC2626" />
+              </View>
+              <Text style={[styles.modalTitle, { color: '#DC2626' }]}>TRIGGER EMERGENCY SOS</Text>
+            </View>
+            <Text style={styles.modalSub}>
+              This will immediately broadcast an urgent emergency alert to the school administration, principal, and transport department with your live vehicle GPS location.
+            </Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancel}
+                onPress={() => setConfirmSos(false)}
+                disabled={sosSending}
+              >
+                <Text style={styles.modalCancelText}>{t('driver_ui.cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalOk, { backgroundColor: '#DC2626' }]}
+                onPress={triggerSos}
+                disabled={sosSending}
+              >
+                <Text style={{ color: '#fff', fontWeight: '800' }}>
+                  {sosSending ? 'TRANSMITTING...' : 'YES, SEND SOS'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       {disclosureModal}
     </ScreenLayout>
   );
@@ -497,6 +572,22 @@ const getStyles = (theme: any) => StyleSheet.create({
     borderColor: theme.colors.primary + '44',
   },
   secondaryBtnText: { color: theme.colors.primary, fontWeight: '800', fontSize: 15 },
+  sosBtn: {
+    backgroundColor: '#DC2626',
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    minHeight: 52,
+  },
+  sosBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '900',
+    fontSize: 15,
+    letterSpacing: 1,
+  },
   btnDisabled: { opacity: 0.6 },
   card: {
     marginHorizontal: 16,

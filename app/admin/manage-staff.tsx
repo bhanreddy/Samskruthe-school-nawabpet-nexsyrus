@@ -34,7 +34,9 @@ import { StaffService } from '../../src/services/staffService';
 import { useTheme } from '../../src/hooks/useTheme';
 import LogoLoader from '../../src/components/LogoLoader';
 import { usePermissions } from '../../src/hooks/usePermissions';
-import { clearStaffPortalSession, setStaffPortalSession } from '../../src/services/staffPortalSession';
+import { useAuth } from '../../src/hooks/useAuth';
+import { setStaffPortalSession } from '../../src/services/staffPortalSession';
+import { endStaffPortalAccess } from '../../src/services/staffPortalExit';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -279,6 +281,7 @@ function StatsBar({ staffList, isDark }: { staffList: StaffMember[]; isDark: boo
 export default function ManageStaff() {
   const { theme, isDark } = useTheme();
   const router = useRouter();
+  const { user } = useAuth();
   const { hasPermission } = usePermissions();
   const canManageStaff = hasPermission('staff.create') || hasPermission('staff.edit');
 
@@ -309,7 +312,7 @@ export default function ManageStaff() {
 
   useEffect(() => { fetchStaff(); }, []);
   useFocusEffect(React.useCallback(() => {
-    clearStaffPortalSession();
+    void endStaffPortalAccess();
   }, []));
 
   const fetchStaff = async () => {
@@ -369,10 +372,16 @@ export default function ManageStaff() {
         );
         return;
       }
-      setStaffPortalSession(item.id, item.display_name, staff.user_id);
+      const actorUserId = user?.userId;
+      setStaffPortalSession(item.id, item.display_name, staff.user_id, actorUserId);
       router.push({
         pathname: '/staff/dashboard',
-        params: { staffId: item.id, viewAsName: item.display_name, viewAsUserId: staff.user_id },
+        params: {
+          staffId: item.id,
+          viewAsName: item.display_name,
+          viewAsUserId: staff.user_id,
+          viewAsActorId: actorUserId || '',
+        },
       } as any);
     } catch (error: any) {
       alertCompat('Cannot Open Portal', error?.message || 'Could not validate this staff account.');
@@ -512,7 +521,7 @@ export default function ManageStaff() {
             {filteredStaff.length} {filteredStaff.length === 1 ? 'member' : 'members'}
           </Text>
           {searchQuery.length > 0 && (
-            <Text style={styles.countSub}> matching "{searchQuery}"</Text>
+            <Text style={styles.countSub}> matching &quot;{searchQuery}&quot;</Text>
           )}
         </Animated.View>
       )}

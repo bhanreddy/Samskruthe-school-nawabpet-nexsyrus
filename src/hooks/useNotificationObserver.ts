@@ -18,6 +18,7 @@ const NOTIFICATION_ROUTES: Record<string, string> = {
   LMS_CONTENT: '/Screen/lms',
   TIMETABLE_UPDATED: '/Screen/timetable',
   NOTICE_ADMIN_STUDENT: '/Screen/announcements',
+  POPUP_ANNOUNCEMENT: '/updates',
   FEE_REMINDER: '/Screen/fees',
   FEE_COLLECTED: '/Screen/fees',
   LEAVE_SUBMITTED: '/admin/leaves',
@@ -37,6 +38,18 @@ const NOTIFICATION_ROUTES: Record<string, string> = {
   TRANSPORT_TRIP_CANCELLED: '/Screen/busTracker',
   STUDENT_BUS_PRESENT: '/Screen/busTracker',
   STUDENT_BUS_ABSENT: '/Screen/busTracker',
+  // Batch 2: Attendance Intelligence & Substitution
+  ATTENDANCE_RISK_WARNING: '/admin/attendance-risk',
+  ATTENDANCE_RISK_CRITICAL: '/admin/attendance-risk',
+  SUBSTITUTION_ASSIGNED: '/admin/substitutions',
+  // Batch 2: Transport Safety & Safeguarding
+  TRANSPORT_OVERSPEED_ALERT: '/admin/live-bus-tracking',
+  TRANSPORT_SOS_ALERT: '/admin/live-bus-tracking',
+  TRANSPORT_SAFEGUARDING_ANOMALY: '/admin/live-bus-tracking',
+  // Batch 2: Support Helpdesk
+  SUPPORT_TICKET_CREATED: '/admin/helpdesk',
+  SUPPORT_TICKET_REPLIED: '/Screen/helpdesk',
+  SUPPORT_TICKET_RESOLVED: '/Screen/helpdesk',
 };
 
 interface PendingNotification {
@@ -60,6 +73,8 @@ const LEGACY_ROUTES: Record<string, string> = {
   '/student/notices': '/Screen/announcements',
   '/student/fees': '/Screen/fees',
   '/staff/payroll': '/staff/payslip',
+  '/admin/support': '/admin/helpdesk',
+  '/student/helpdesk': '/Screen/helpdesk',
 };
 
 export function resolveNotificationRoute(data: Record<string, any> | null | undefined): string | null {

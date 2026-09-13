@@ -1,0 +1,12 @@
+{
+  "name": "staff-biometrics",
+  "platforms": ["android", "apple", "web"],
+  "android": {
+    "package": "com.schoolims.biometrics",
+    "modules": ["com.schoolims.biometrics.StaffBiometricsModule"]
+  },
+  "apple": {
+    "modules": ["StaffBiometricsModule"],
+    "podspecPath": "StaffBiometrics.podspec"
+  }
+}

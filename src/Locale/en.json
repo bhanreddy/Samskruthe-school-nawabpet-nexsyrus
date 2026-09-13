@@ -97,7 +97,13 @@
       "assessments": "Assessments",
       "personal_details": "Personal details",
       "in_app_chat": "In-app chat",
-      "learning_resources": "Learning resources"
+      "learning_resources": "Learning resources",
+      "broadcast_updates": "School notices & alerts",
+      "visit_school": "Campus visit pass",
+      "student_pickup": "Gate pickup pass",
+      "authorized_guardians": "Approved family members",
+      "academic_calendar": "School schedules & events",
+      "event_desk": "Consent, pass & feedback"
     }
   },
   "studentSpace": {
@@ -366,6 +372,13 @@
     "parent_singular": "Parent"
   },
   "diary": "Diary",
+  "updates": "Updates",
+  "visitSchool": "Visit School",
+  "studentPickup": "Student Pickup",
+  "authorizedGuardians": "Guardians",
+  "academicCalendar": "Academic Calendar",
+  "paperlessEvents": "Paperless Event Desk",
+  "eventDesk": "Event Desk",
   "readAloud": {
     "play": "Read aloud",
     "stop": "Stop reading",
@@ -427,6 +440,12 @@
     "studentFallback": "Student",
     "classWord": "Class",
     "sectionPrefix": "Sec",
+    "hiName": "Hi, {{name}}",
+    "incharge": "Incharge",
+    "heroWelcome": "Where Students Meet Their Future",
+    "urgentCount": "{{count}} Urgent Notifications",
+    "noUrgent": "No urgent notifications",
+    "view": "View",
     "attendanceStatus": {
       "present": "Present",
       "absent": "Absent",
@@ -603,6 +622,25 @@
   "password": "Password",
   "accessYourGradesTimetable": "Access your grades, timetable, and campus services.",
   "signIn": "Sign In",
+  "qrLogin": {
+    "emailLogin": "Email Login",
+    "qrLogin": "QR Login",
+    "subtitle": "Scan your school-issued login card",
+    "or": "OR",
+    "scanCta": "Scan QR to Login",
+    "scanCtaAdd": "Scan QR to add account",
+    "scanHint": "Quick and secure access with your private school card",
+    "cameraNeeded": "Camera access needed",
+    "cameraRequired": "Camera access is required to scan your login QR.",
+    "cameraSettings": "Enable camera access for SchoolIMS in device settings, then return here.",
+    "openSettings": "Open Settings",
+    "allowCamera": "Allow Camera",
+    "backToLogin": "Back to login",
+    "backToAccounts": "Back to accounts",
+    "addAccountTitle": "Scan QR to add this account",
+    "validating": "Validating login QR…",
+    "signingIn": "Signing you in securely…"
+  },
   "wELCOMETOTHEFUTURE": "✨  WELCOME TO THE FUTURE",
   "futuristic": "Futuristic",
   "nextGen": "Next-Gen",
@@ -1045,8 +1083,8 @@
     "add_account_from_settings": "Add another account from Settings to switch between profiles instantly.",
     "add_account_enable_switching": "Add another account in Settings to enable quick switching.",
     "manage_accounts": "Manage accounts",
-    "use_login_email_password": "Use that login's email and password (parent or staff)",
-    "add_login_instructions": "Enter the email and password for your other account. No admin setup needed.",
+    "use_login_email_password": "Use that login's email, password, or school QR card",
+    "add_login_instructions": "Enter the email and password for your other account, or scan its login QR. No admin setup needed.",
     "email": "Email",
     "password": "Password",
     "login_and_add": "Log in & add",
@@ -1093,5 +1131,18 @@
     "month_october": "October",
     "month_november": "November",
     "month_december": "December"
+  },
+  "admissions": {
+    "title": "Admissions",
+    "pipeline": "Admissions Pipeline",
+    "enquiry": "Admission Enquiry",
+    "application": "Admission Application",
+    "documents": "Documents",
+    "interview": "Interview & Test",
+    "decision": "Admission Decision",
+    "convert_to_student": "Convert to Student",
+    "analytics": "Admissions Analytics",
+    "workflow_config": "Workflow Configuration",
+    "sla_breach": "SLA Breach"
   }
 }

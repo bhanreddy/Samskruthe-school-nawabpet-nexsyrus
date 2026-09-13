@@ -21,6 +21,7 @@ import {
     SettingRow,
     SettingsGroup as Group,
 } from '../../src/components/SettingsSection';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /** Returns the first human-readable ID (not a UUID) from the user object */
 function getHumanId(user: any): string {
@@ -41,9 +42,21 @@ export default function StaffSettings() {
     const { theme, isDark, toggleTheme } = useTheme();
     const styles = React.useMemo(() => getStyles(theme.colors), [theme]);
     const [switcherOpen, setSwitcherOpen] = useState(false);
+    const [birthdaySoundEnabled, setBirthdaySoundEnabled] = useState(true);
     const { staffId, isViewingAsAdmin, viewAsName } = useEffectiveStaffId();
     const avatarUploaderRef = useRef<AvatarUploaderHandle>(null);
     const [viewedStaff, setViewedStaff] = useState<Staff | null>(null);
+
+    React.useEffect(() => {
+        AsyncStorage.getItem('birthday_celebration_sound_enabled').then((val) => {
+            if (val === 'false') setBirthdaySoundEnabled(false);
+        }).catch(() => {});
+    }, []);
+
+    const handleToggleBirthdaySound = async (val: boolean) => {
+        setBirthdaySoundEnabled(val);
+        await AsyncStorage.setItem('birthday_celebration_sound_enabled', val ? 'true' : 'false');
+    };
 
     React.useEffect(() => {
         if (!isViewingAsAdmin || !staffId) { setViewedStaff(null); return; }
@@ -167,7 +180,6 @@ export default function StaffSettings() {
                         icon="language" iconColor="#3B82F6" iconBg="#EFF6FF"
                         label="Language (Telugu)"
                         sublabel="Switch the app between English and Telugu"
-                        isLast
                         rightElement={
                             <Switch
                                 trackColor={{ false: theme.colors.border, true: theme.colors.primary }}
@@ -176,6 +188,20 @@ export default function StaffSettings() {
                                     i18n.changeLanguage(next ? 'te' : 'en').catch(console.error);
                                 }}
                                 value={i18n.language === 'te'}
+                            />
+                        }
+                    />
+                    <SettingRow
+                        icon="musical-notes" iconColor="#EC4899" iconBg="#FDF2F8"
+                        label="Birthday celebration sounds"
+                        sublabel="Play a cheerful greeting sound on birthdays"
+                        isLast
+                        rightElement={
+                            <Switch
+                                trackColor={{ false: theme.colors.border, true: '#F472B6' }}
+                                thumbColor="#fff"
+                                onValueChange={handleToggleBirthdaySound}
+                                value={birthdaySoundEnabled}
                             />
                         }
                     />

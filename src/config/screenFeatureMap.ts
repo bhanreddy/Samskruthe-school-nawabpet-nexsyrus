@@ -17,5 +17,6 @@ export const SCREEN_FEATURE_MAP: Record<string, FeatureKey> = {
   '/Screen/lms': 'topbar.lms',
   '/Screen/timetable': 'nav.time_table',
   '/Screen/fees': 'nav.fees',
+  '/Screen/calendar': 'nav.calendar',
   '/Screen/attendance': 'home.todays_snapshot',
 };

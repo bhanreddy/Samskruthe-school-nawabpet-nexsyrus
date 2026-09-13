@@ -35,7 +35,7 @@ const ORDERED_TABS = ['dashboard', 'manage-students', 'timetable', 'results'];
 
 export default function StaffFooter({ state, descriptors, navigation }: any) {
     const { theme, isDark } = useTheme();
-    const { staffId, isViewingAsAdmin, viewAsName, userId: viewAsUserId } = useEffectiveStaffId();
+    const { staffId, isViewingAsAdmin, viewAsName, userId: viewAsUserId, actorUserId } = useEffectiveStaffId();
 
     // Filter and sort routes to only show the main 4 tabs
     const visibleRoutes = state.routes
@@ -186,7 +186,7 @@ export default function StaffFooter({ state, descriptors, navigation }: any) {
 
                             if (!isFocused && !event.defaultPrevented) {
                                 navigation.navigate(route.name, isViewingAsAdmin
-                                  ? { ...(route.params || {}), staffId, viewAsName, viewAsUserId }
+                                  ? { ...(route.params || {}), staffId, viewAsName, viewAsUserId, viewAsActorId: actorUserId }
                                   : route.params);
                             }
                         };

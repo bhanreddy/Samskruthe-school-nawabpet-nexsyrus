@@ -63,16 +63,23 @@ export default function StaffLayout() {
             <MaterialTopTabs.Screen name="complaints" options={{ ...hiddenScreenOptions, headerShown: false } as any} />
             <MaterialTopTabs.Screen name="messages" options={{ ...hiddenScreenOptions, headerShown: false } as any} />
             <MaterialTopTabs.Screen name="diary" options={{ ...hiddenScreenOptions, headerShown: false } as any} />
+            <MaterialTopTabs.Screen name="events" options={{ ...hiddenScreenOptions, title: 'Events', headerShown: false } as any} />
+            <MaterialTopTabs.Screen name="academic-today" options={{ ...hiddenScreenOptions, title: 'Academic Today', headerShown: false } as any} />
             <MaterialTopTabs.Screen name="leaves" options={{ ...hiddenScreenOptions, headerShown: false } as any} />
             <MaterialTopTabs.Screen name="lms-upload" options={hiddenScreenOptions} />
             <MaterialTopTabs.Screen name="notices" options={{ ...hiddenScreenOptions, headerShown: false } as any} />
+            <MaterialTopTabs.Screen name="updates" options={{ ...hiddenScreenOptions, headerShown: false } as any} />
+            <MaterialTopTabs.Screen name="school-stories" options={{ ...hiddenScreenOptions, title: 'School Stories', headerShown: false } as any} />
             <MaterialTopTabs.Screen name="payslip" options={hiddenScreenOptions} />
             <MaterialTopTabs.Screen name="profile" options={hiddenScreenOptions} />
             <MaterialTopTabs.Screen name="settings" options={hiddenScreenOptions} />
             <MaterialTopTabs.Screen name="student-details" options={hiddenScreenOptions} />
+            <MaterialTopTabs.Screen name="fine-request" options={{ ...hiddenScreenOptions, title: 'Fine request', headerShown: false } as any} />
             <MaterialTopTabs.Screen name="student-portfolio" options={hiddenScreenOptions} />
             <MaterialTopTabs.Screen name="roll-numbers" options={{ ...hiddenScreenOptions, title: 'Roll Numbers' } as any} />
             <MaterialTopTabs.Screen name="progress-card-assistant" options={{ ...hiddenScreenOptions, title: 'Progress Cards' } as any} />
+            <MaterialTopTabs.Screen name="admissions" options={{ ...hiddenScreenOptions, title: 'Admissions', headerShown: false } as any} />
+            <MaterialTopTabs.Screen name="admission-detail" options={{ ...hiddenScreenOptions, title: 'Application', headerShown: false } as any} />
         </MaterialTopTabs>
     );
 }

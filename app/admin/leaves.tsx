@@ -127,7 +127,7 @@ export default function AdminLeaves() {
             {leaveTypeLabel(item.leave_type).toUpperCase()} • {formatDateRange(item.start_date, item.end_date)}
           </Text>
           <Text style={styles.metaMuted}>Applied {formatDateTime(item.created_at)}</Text>
-          <Text style={styles.reasonText}>"{item.reason}"</Text>
+          <Text style={styles.reasonText}>&quot;{item.reason}&quot;</Text>
         </View>
         <View style={styles.actionRow}>
           <TouchableOpacity style={[styles.actionButton, styles.rejectBtn]} onPress={() => handleAction(item.id, 'rejected')}>
@@ -171,7 +171,7 @@ export default function AdminLeaves() {
               {leaveTypeLabel(item.leave_type).toUpperCase()} • {formatDateRange(item.start_date, item.end_date)}
             </Text>
             <Text style={styles.metaMuted}>{calculateDuration(item.start_date, item.end_date)}</Text>
-            <Text style={styles.reasonText}>"{item.reason}"</Text>
+            <Text style={styles.reasonText}>&quot;{item.reason}&quot;</Text>
             <View style={styles.historyMetaBlock}>
               <Text style={styles.historyMetaLine}>
                 <Text style={styles.historyMetaLabel}>Applied </Text>

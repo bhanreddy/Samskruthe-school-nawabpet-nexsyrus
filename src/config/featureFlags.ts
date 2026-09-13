@@ -24,6 +24,7 @@ export const FEATURE_DEFAULTS = {
   'nav.time_table': true,
   'nav.fees': true,
   'nav.results': true,
+  'nav.calendar': true,
   'nav.home': true,
   'comm.messenger': true,
 } as const;

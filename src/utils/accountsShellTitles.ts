@@ -7,6 +7,8 @@ const EXACT: Record<string, string> = {
   '/accounts/fees/adjust': 'Issue Waiver',
   '/accounts/fees/details': 'Fee Ledger',
   '/accounts/receipts': 'Receipts',
+  '/accounts/fines': 'Fines & Adjustments',
+  '/accounts/event-collections': 'Event Collections',
   '/accounts/defaulters': 'Defaulters',
   '/accounts/transport-fees': 'Transport Fees',
   '/accounts/hostel': 'Hostel Students',
@@ -21,7 +23,9 @@ const EXACT: Record<string, string> = {
   '/accounts/addAdmin': 'Add Admin',
   '/accounts/pending-enrollments': 'Pending Enrollments',
   '/accounts/manage-users': 'Users & Clients',
+  '/accounts/student-login-qr': 'Student Login QR Codes',
   '/accounts/settings': 'Settings',
+  '/accounts/updates': 'Updates',
 };
 
 export function normalizeAccountsPath(pathname: string): string {
@@ -33,6 +37,7 @@ export function normalizeAccountsPath(pathname: string): string {
 export function getAccountsShellTitle(pathname: string): string {
   const p = normalizeAccountsPath(pathname);
   if (EXACT[p]) return EXACT[p];
+  if (p.startsWith('/accounts/fines')) return 'Fines & Adjustments';
   if (p.startsWith('/accounts/fees/')) return 'Fees';
   return 'Accounts';
 }

@@ -14,6 +14,7 @@ export const STAFF_ADD_LOGIN_ROLE_OPTIONS = [
   { code: 'principal', label: 'Principal', portal: 'staff' as const },
   { code: 'admin', label: 'Administrator', portal: 'admin' as const },
   { code: 'driver', label: 'Driver', portal: 'driver' as const },
+  { code: 'gate_keeper', label: 'Gate Keeper', portal: 'gatekeeper' as const },
 ] as const;
 
 export type StaffAddLoginRoleCode = (typeof STAFF_ADD_LOGIN_ROLE_OPTIONS)[number]['code'];
@@ -33,6 +34,7 @@ export function resolveRoleFromDesignation(designationName: string | null | unde
   if (name === 'principal') return 'principal';
   if (name.includes('admin')) return 'admin';
   if (name === 'driver') return 'driver';
+  if (name.includes('gate') || name.includes('security')) return 'gate_keeper';
   return 'staff';
 }
 
@@ -46,9 +48,16 @@ export function isStudentRole(roleCode: string | null | undefined): boolean {
 }
 
 /**
+ * Check if a role code represents a gatekeeper account.
+ */
+export function isGatekeeperRole(roleCode: string | null | undefined): boolean {
+  return roleCode === 'gate_keeper' || roleCode === 'gatekeeper';
+}
+
+/**
  * Roles that may keep cached UI state while retrying a transient refresh.
  *
- * Parent (student), admin, driver, and staff/teacher/principal logins stay
+ * Parent (student), admin, driver, gatekeeper, and staff/teacher/principal logins stay
  * A network/5xx refresh failure may be retried without immediately clearing
  * their cached UI state. Confirmed 401/403, school mismatch, invalid refresh
  * tokens, and SIGNED_OUT always revoke local authority regardless of role.
@@ -66,10 +75,17 @@ export function isPersistentSessionRole(roleCode: string | null | undefined): bo
     'parent',
     'admin',
     'driver',
+    'gate_keeper',
+    'gatekeeper',
     'staff',
     'teacher',
     'principal',
+    'applicant',
   ].includes(roleCode);
+}
+
+export function isApplicantRole(roleCode: string | null | undefined): boolean {
+  return roleCode === 'applicant';
 }
 
 /** Roles allowed to access /staff/* app routes. */

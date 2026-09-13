@@ -408,7 +408,7 @@ const DCGDScreen = () => {
             <View style={styles.footerContent}>
               <Ionicons name="shield-checkmark-outline" size={13} color={isDark ? '#475569' : '#CBD5E1'} />
               <Text style={[styles.footerNote, { color: isDark ? '#475569' : '#CBD5E1' }]}>
-                Content managed by Nexsyrus Pvt. Ltd. &amp; your school's Super Admin console.
+                Content managed by Nexsyrus Pvt. Ltd. &amp; your school&apos;s Super Admin console.
               </Text>
             </View>
           </Animated.View>

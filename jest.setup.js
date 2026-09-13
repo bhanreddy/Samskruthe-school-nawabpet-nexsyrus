@@ -34,3 +34,20 @@ jest.mock('expo-haptics', () => ({
 jest.mock('expo-linear-gradient', () => ({
     LinearGradient: 'LinearGradient',
 }));
+
+// Mock Expo AV
+jest.mock('expo-av', () => ({
+    Audio: {
+        Sound: {
+            createAsync: jest.fn().mockResolvedValue({
+                sound: {
+                    playAsync: jest.fn(),
+                    unloadAsync: jest.fn(),
+                    setStatusAsync: jest.fn(),
+                    setOnPlaybackStatusUpdate: jest.fn(),
+                },
+            }),
+        },
+        setAudioModeAsync: jest.fn().mockResolvedValue(undefined),
+    },
+}));

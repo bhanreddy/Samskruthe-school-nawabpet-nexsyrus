@@ -345,6 +345,7 @@ const SlotItem = ({ item, index, currentTime, isDark, totalSlots, onOpenAttendan
   totalSlots: number;
   onOpenAttendance?: () => void;
 }) => {
+  const router = useRouter();
   const status = getPeriodStatus(item.start_time, item.end_time, currentTime);
   const isActive = status === 'active';
   const isCompleted = status === 'completed';
@@ -563,7 +564,14 @@ const SlotItem = ({ item, index, currentTime, isDark, totalSlots, onOpenAttendan
               </View>
             </View>
 
-            {item.is_substitution && item.attendance_session && onOpenAttendance ? (
+            <Pressable
+              onPress={() => router.push('/staff/academic-today')}
+              style={{ marginTop: 10, alignSelf: 'flex-start', backgroundColor: subjectTheme.accent, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 }}
+            >
+              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12 }}>Open class</Text>
+            </Pressable>
+
+            {item.attendance_session ? (
               <Pressable
                 onPress={onOpenAttendance}
                 style={[styles.coverCardAttendanceButton, { backgroundColor: subjectTheme.accent }]}

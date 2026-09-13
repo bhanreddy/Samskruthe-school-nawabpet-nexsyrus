@@ -44,6 +44,7 @@ interface AuthContextType {
   schoolId: number | null;
 
   signIn: typeof AuthService.signIn;
+  signInWithQr: typeof AuthService.signInWithQr;
   signOut: () => Promise<void>;
   /**
    * End the live session but keep this account (and every sibling) in the
@@ -58,6 +59,8 @@ interface AuthContextType {
   switchAccount: (userId: string) => Promise<{ session?: AuthSession; error?: string }>;
   /** Phase 1/2 — add another account to the vault; active account stays unchanged. */
   addAccount: (email: string, password: string) => Promise<{ session?: AuthSession; error?: string }>;
+  /** Additive QR login for the multi-account vault; does not replace the live session. */
+  addAccountWithQr: (qrPayload: string) => Promise<{ session?: AuthSession; error?: string }>;
   /** Portal switcher — contexts available under this login. */
   portalContexts: PortalContextsPayload | null;
   refreshPortalContexts: () => Promise<PortalContextsPayload>;
@@ -74,12 +77,14 @@ const AuthContext = createContext<AuthContextType>({
   schoolId: null,
 
   signIn: async () => ({ error: 'Not initialized' }),
+  signInWithQr: async () => ({ error: 'Not initialized' }),
   signOut: async () => {},
   signOutKeepAccount: async () => {},
   refreshSession: async () => {},
   updateUserPhoto: async () => {},
   switchAccount: async () => ({ error: 'Not initialized' }),
   addAccount: async () => ({ error: 'Not initialized' }),
+  addAccountWithQr: async () => ({ error: 'Not initialized' }),
   portalContexts: null,
   refreshPortalContexts: async () => ({ activeContextId: null, activeContext: null, groups: [], total: 0 }),
   switchPortalContext: async () => ({ activeContextId: null, activeContext: null, groups: [], total: 0 }),
@@ -423,6 +428,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const signInWithQr = async (qrPayload: string) => {
+    setLoading(true);
+    justSignedIn.current = true;
+    setTimeout(() => { justSignedIn.current = false; }, 5000);
+    try {
+      const result = await AuthService.signInWithQr(qrPayload);
+      if (result.session) {
+        setSession(result.session);
+        const roleCode = result.session.validatedUser?.role?.code;
+        if (roleCode) await SessionPolicy.startSession(roleCode as any);
+      }
+      return result;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const refreshSession = async () => {
     await handleRefresh(role);
   };
@@ -508,6 +530,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return result;
   };
 
+  const addAccountWithQr = async (qrPayload: string) => {
+    const result = await AuthService.addAccountWithQr(qrPayload);
+    if (result.session) {
+      void notificationManager.fanOutRegister();
+    }
+    return result;
+  };
+
   const refreshPortalContexts = async (): Promise<PortalContextsPayload> => {
     const payload = await fetchPortalContexts();
     setPortalContexts(payload);
@@ -557,7 +587,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{
       session, loading, authChecked, user, role, isStudent, schoolId,
-      signIn, signOut, signOutKeepAccount, refreshSession, updateUserPhoto, switchAccount, addAccount,
+      signIn, signInWithQr, signOut, signOutKeepAccount, refreshSession, updateUserPhoto, switchAccount, addAccount, addAccountWithQr,
       portalContexts, refreshPortalContexts, switchPortalContext,
     }}>
       {children}

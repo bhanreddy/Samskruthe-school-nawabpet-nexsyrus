@@ -31,9 +31,11 @@ import { LineChart } from "react-native-gifted-charts";
 import PaymentDueBanner from '../../src/components/PaymentDueBanner';
 import AdminHeaderCard from '../../src/components/AdminHeaderCard';
 import DashboardHero from '../../src/components/DashboardHero';
+import SchoolStoriesStrip from '../../src/components/school-stories/SchoolStoriesStrip';
 import { ACCOUNTS_STAT_KEYS, normalizeAccountsDashboardConfig } from '../../src/utils/constants';
 import { DASHBOARD_SIDEBAR_EXPANDED } from '../../src/components/DashboardWebSidebar';
 import { schoolColorWithAlpha } from '../../src/constants/schoolConfig';
+import { schoolStoriesService, type SchoolStoryAuthor } from '../../src/services/schoolStoriesService';
 
 const IS_WEB = Platform.OS === 'web';
 const DASHBOARD_CACHE_TTL_MS = 60 * 1000;
@@ -824,15 +826,25 @@ export default function AccountsDashboard() {
     },
   });
 
+  const { data: schoolStories, refetch: refetchStories } = usePersistedSWR<SchoolStoryAuthor[]>({
+    cacheKey: 'accounts-school-stories',
+    userId: authUserId,
+    ttlMs: 60_000,
+    persist: true,
+    enabled: !!authUserId,
+    revalidateOnMount: true,
+    fetcher: () => schoolStoriesService.list(),
+  });
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      await Promise.all([refetchStats(), refetchRecentTransactions()]);
+      await Promise.all([refetchStats(), refetchRecentTransactions(), refetchStories()]);
     } finally {
       setRefreshing(false);
     }
-  }, [refetchStats, refetchRecentTransactions]);
+  }, [refetchStats, refetchRecentTransactions, refetchStories]);
 
   useEffect(() => {
     const showLoader = statsLoading && !statsData;
@@ -922,7 +934,9 @@ export default function AccountsDashboard() {
     { id: 'collect', title: 'Collect Fees', description: 'Process student payments', icon: 'cash', color: ['#059669', '#10B981'] as [string, string], route: '/accounts/fees', library: Ionicons, permission: 'fees.collect' },
     { id: 'today_collection', title: "Today's Collection", description: 'Your daily collection report', icon: 'today', color: ['#0E7490', '#06B6D4'] as [string, string], route: '/accounts/fees/today-collection', library: Ionicons, permission: 'fees.collect' },
     { id: 'receipts', title: 'Receipts', description: 'View payment history', icon: 'documents', color: ['#0369A1', '#0EA5E9'] as [string, string], route: '/accounts/receipts', library: Ionicons },
+    { id: 'fines', title: 'Fines & Adjustments', description: 'Policies, waivers & penalties', icon: 'shield-checkmark', color: ['#D97706', '#F59E0B'] as [string, string], route: '/accounts/fines', library: Ionicons, permission: 'fees.view' },
     { id: 'users_clients', title: 'Users / Clients', description: 'Open the user directory', icon: 'people-outline', color: ['#4F46E5', '#7C3AED'] as [string, string], route: '/accounts/manage-users', library: Ionicons },
+    { id: 'student_login_qr', title: 'Student Login QR Codes', description: 'Generate private printable login cards', icon: 'qr-code-outline', color: ['#5B21B6', '#8B5CF6'] as [string, string], route: '/accounts/student-login-qr', library: Ionicons },
     { id: 'expenses', title: 'Expenses', description: 'Manage school expenditures', icon: 'receipt', color: ['#B91C1C', '#EF4444'] as [string, string], route: '/accounts/expenses', library: Ionicons, permission: 'expenses.view' },
     { id: 'payroll', title: 'Payroll', description: 'Staff salary & attendance', icon: 'people', color: ['#4338CA', '#6366F1'] as [string, string], route: '/accounts/payroll', library: Ionicons, permission: 'payroll.process' },
     { id: 'staff', title: 'Add Staff', description: 'Register new employees', icon: 'person-add', color: ['#6D28D9', '#8B5CF6'] as [string, string], route: '/accounts/addStaff', library: Ionicons, permission: 'staff.create' },
@@ -978,6 +992,12 @@ export default function AccountsDashboard() {
               }
             />
           </View>
+
+          <SchoolStoriesStrip
+            stories={schoolStories ?? []}
+            tone={isDark ? 'onDark' : 'onLight'}
+            style={{ marginBottom: 24 }}
+          />
 
           {/* Stats row */}
           <Animated.View entering={FadeInDown.delay(60).duration(400)} style={{ flexDirection: 'row', gap: 16, marginBottom: 28 }}>
@@ -1084,6 +1104,13 @@ export default function AccountsDashboard() {
                 portalBadge="ACCOUNTS"
               />
             }
+            />
+          </View>
+
+        <View style={styles.bannerPad}>
+          <SchoolStoriesStrip
+            stories={schoolStories ?? []}
+            tone={isDark ? 'onDark' : 'onLight'}
           />
         </View>
 

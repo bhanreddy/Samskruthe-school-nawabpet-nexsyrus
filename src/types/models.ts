@@ -209,6 +209,12 @@ export interface FeeSummary {
     readonly balance: number;
     readonly total_balance?: number;
     readonly transport_due?: TransportDue | null;
+    readonly fine_due?: {
+        readonly total_fines: number;
+        readonly balance_due: number;
+        readonly paid_amount?: number;
+        readonly count: number;
+    };
 }
 
 /** Per fee-type balance line on a fee receipt */
@@ -396,6 +402,7 @@ export interface FeeResponse {
     };
     readonly summary: FeeSummary;
     readonly fees: StudentFee[];
+    readonly fines?: any[];
     readonly transport_due?: TransportDue | null;
 }
 

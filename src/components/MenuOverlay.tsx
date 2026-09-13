@@ -190,6 +190,7 @@ const MenuOverlay: React.FC<Props> = ({ visible, onClose, userType = 'student', 
 
     /* ── Menu items ── */
     const studentMenuItems: MenuItem[] = [
+        { key: 'calendar', label: 'School Calendar', icon: 'calendar-outline', link: '/Screen/calendar', accent: '#4F46E5' },
         { key: 'dcgd', label: 'DCGD', icon: 'ribbon-outline', link: '/Screen/dcgd', accent: '#0D9488', feature: 'menu.dcgd' },
         { key: 'ai_doubt', label: 'AI Doubt Assist', icon: 'chatbubble-ellipses-outline', link: '/Screen/aiChat', accent: '#6366F1', feature: 'menu.ai_doubt_assist' },
         { key: 'insurance', label: 'Insurance', icon: 'shield-checkmark-outline', link: '/Screen/insurance', accent: '#10B981', feature: 'menu.insurance' },
@@ -198,6 +199,7 @@ const MenuOverlay: React.FC<Props> = ({ visible, onClose, userType = 'student', 
     ];
 
     const staffMenuItems: MenuItem[] = [
+        { key: 'calendar', label: 'Academic Calendar', icon: 'calendar-outline', link: '/staff/calendar', accent: '#4F46E5' },
         { key: 'attendance', label: 'Mark Attendance', icon: 'checkbox-outline', link: '/staff/manage-students', accent: '#4F46E5' },
         { key: 'timetable', label: 'My Timetable', icon: 'calendar-outline', link: '/staff/timetable', accent: '#0EA5E9' },
         { key: 'student_portfolio', label: 'Student Portfolio', icon: 'id-card-outline', link: '/staff/student-portfolio', accent: '#14B8A6' },
@@ -207,6 +209,7 @@ const MenuOverlay: React.FC<Props> = ({ visible, onClose, userType = 'student', 
     ];
 
     const driverMenuItems: MenuItem[] = [
+        { key: 'calendar', label: 'School Calendar', icon: 'calendar-outline', link: '/driver/calendar', accent: '#4F46E5' },
         { key: 'route', label: t('driver_ui.route'), icon: 'navigate-outline', link: '/driver/dashboard', accent: '#EC4899' },
         { key: 'students', label: t('driver_ui.students'), icon: 'people-outline', link: '/driver/students', accent: '#6366F1' },
         { key: 'profile', label: t('driver_ui.driver_profile'), icon: 'person-outline', link: '/driver/profile', accent: '#10B981' },

@@ -269,6 +269,41 @@ export interface Theme {
     colors: ThemeColors;
 }
 
+// ── Glassmorphism Surfaces ──────────────────────
+export const GlassSurfaces = {
+    light: {
+        card: 'rgba(255, 255, 255, 0.72)',
+        cardStrong: 'rgba(255, 255, 255, 0.88)',
+        cardBorder: 'rgba(255, 255, 255, 0.5)',
+        subtle: 'rgba(255, 255, 255, 0.45)',
+        overlay: 'rgba(248, 250, 252, 0.85)',
+        innerPanel: 'rgba(241, 245, 249, 0.6)',
+    },
+    dark: {
+        card: 'rgba(30, 41, 59, 0.65)',
+        cardStrong: 'rgba(30, 41, 59, 0.82)',
+        cardBorder: 'rgba(255, 255, 255, 0.08)',
+        subtle: 'rgba(15, 23, 42, 0.6)',
+        overlay: 'rgba(11, 15, 25, 0.88)',
+        innerPanel: 'rgba(15, 23, 42, 0.5)',
+    },
+} as const;
+
+// ── Premium Gradients ───────────────────────────
+export const PremiumGradients = {
+    danger:  ['#FF6B6B', '#EE5A24'] as [string, string],
+    warning: ['#F59E0B', '#FFA940'] as [string, string],
+    rose:    ['#E11D48', '#F43F5E'] as [string, string],
+    success: ['#059669', '#10B981'] as [string, string],
+    indigo:  ['#4F46E5', '#6366F1'] as [string, string],
+    purple:  ['#7C3AED', '#8B5CF6'] as [string, string],
+    sky:     ['#0284C7', '#38BDF8'] as [string, string],
+    mesh: {
+        light: ['#F8FAFC', '#EEF2FF', '#F0F9FF', '#F8FAFC'] as readonly string[],
+        dark:  ['#0B0F19', '#0F172A', '#1E1B4B', '#0B0F19'] as readonly string[],
+    },
+} as const;
+
 // Re-export SchoolTheme types for backward compatibility
 export type { SchoolTheme } from './types';
 export { defaultLightTheme, defaultDarkTheme } from './types';

@@ -15,6 +15,7 @@ import HtmlPreview from '../../src/components/HtmlPreview';
 import { FeeService } from '../../src/services/feeService';
 import { SchoolSettingsService, SchoolSettings } from '../../src/services/schoolSettingsService';
 import { alertCompat } from '../../src/utils/crossPlatformAlert';
+import ParentFinesSection from '../../src/features/fines/ParentFinesSection';
 
 const FeesScreen = () => {
   const {
@@ -266,7 +267,7 @@ const FeesScreen = () => {
       </Animated.View>}
     </View>
 
-    <FlatList contentContainerStyle={styles.list} data={feeData?.fees || []} renderItem={renderFeeItem} keyExtractor={(item) => item.id} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#4F46E5" />} ListEmptyComponent={<View style={styles.emptyContainer}>
+    <FlatList contentContainerStyle={styles.list} data={feeData?.fees || []} renderItem={renderFeeItem} keyExtractor={(item) => item.id} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#4F46E5" />} ListHeaderComponent={<ParentFinesSection studentId="me" />} ListEmptyComponent={<View style={styles.emptyContainer}>
       <Ionicons name="wallet-outline" size={64} color="#ccc" />
       <Text style={styles.emptyText}>No fee records found.</Text>
     </View>} />

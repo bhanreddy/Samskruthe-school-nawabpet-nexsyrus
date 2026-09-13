@@ -142,7 +142,7 @@ export const SmartDiaryService = {
     }
     return api.uploadFormData<{ attachments: string[]; can_send: boolean }>('/diary/smart/upload', form, {
       silent: true,
-      timeout: 45000,
+      timeoutMs: 45000,
     });
   },
 
@@ -152,21 +152,21 @@ export const SmartDiaryService = {
     for (let index = 0; index < uris.length; index += 1) {
       appendFile(form, 'photos', uris[index], `diary-${index}.jpg`, 'image/jpeg');
     }
-    return api.uploadFormData<ExtractResult>('/diary/smart/extract', form, { silent: true, timeout: 90000 });
+    return api.uploadFormData<ExtractResult>('/diary/smart/extract', form, { silent: true, timeoutMs: 90000 });
   },
 
   transcribe: async (uri: string, context: Record<string, string | number | null | undefined> = {}) => {
     const form = new FormData();
     appendContext(form, context);
     appendFile(form, 'audio', uri, 'diary-voice.m4a', 'audio/mp4');
-    return api.uploadFormData<ExtractResult>('/diary/smart/transcribe', form, { silent: true, timeout: 90000 });
+    return api.uploadFormData<ExtractResult>('/diary/smart/transcribe', form, { silent: true, timeoutMs: 90000 });
   },
 
   publish: (data: Record<string, unknown>) =>
     api.post<{ message: string; entries: { id: string; class_section_id: string; createdNew?: boolean; duplicate?: boolean }[]; results: unknown[] }>(
       '/diary/smart/publish',
       data,
-      { silent: true, timeout: 45000 },
+      { silent: true, timeoutMs: 45000 },
     ),
 
   copy: (data: { source_id: string; class_section_ids: string[]; submission_ids?: string[]; subject_id?: string }) =>
@@ -178,12 +178,12 @@ export const SmartDiaryService = {
     appendFile(form, 'photos', uri, 'class-diary.jpg', 'image/jpeg');
     return api.uploadFormData<ClassDiaryExtractResult>('/diary/smart/class-diary/extract', form, {
       silent: true,
-      timeout: 90000,
+      timeoutMs: 90000,
     });
   },
 
   publishClassDiary: (data: Record<string, unknown>) =>
-    api.post('/diary/smart/class-diary/publish', data, { silent: true, timeout: 45000 }),
+    api.post('/diary/smart/class-diary/publish', data, { silent: true, timeoutMs: 45000 }),
 };
 
 function appendContext(form: FormData, context: Record<string, string | number | null | undefined>) {

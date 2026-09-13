@@ -52,7 +52,7 @@ interface CacheEntry {
   data: Partial<AnalyticsData>;
   fetchedAt: number; // ms timestamp
 }
-const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL_MS = 15 * 1000; // 15 seconds
 const cache: Record<TimeRange, CacheEntry | null> = {
   month:   null,
   quarter: null,
@@ -120,7 +120,7 @@ export function useAnalytics(): UseAnalyticsReturn {
       setError(null);
 
       try {
-        const data = await AnalyticsService.getAnalytics(selectedRange);
+        const data = await AnalyticsService.getAnalytics(selectedRange, isRefresh);
 
         if (!isAnalyticsPayload(data)) {
           throw new Error('Analytics data is unavailable. Please try again.');

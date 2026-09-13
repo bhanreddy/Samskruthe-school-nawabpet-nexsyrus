@@ -45,6 +45,7 @@ import Constants from 'expo-constants';
 import ForceUpdateScreen from '../src/components/ForceUpdateScreen';
 import { useVersionCheck } from '../src/hooks/useVersionCheck';
 import FestivalPosterGate from '../src/components/FestivalPosterGate';
+import PopupQueueProvider from '../src/features/popups/components/PopupQueueProvider';
 import { selectDisposableVersionCacheKeys } from '../src/utils/updateCachePolicy';
 
 // Keep the splash screen visible while we fetch resources
@@ -221,6 +222,7 @@ function ThemeSyncWrapper() {
                 <Stack.Screen name="accounts" options={{ headerShown: false }} />
                 <Stack.Screen name="Screen" options={{ headerShown: false }} />
                 <Stack.Screen name="notifications" options={{ headerShown: false }} />
+                <Stack.Screen name="updates" options={{ headerShown: false }} />
               </Stack>
             </AuthGate>
           </View>
@@ -230,6 +232,8 @@ function ThemeSyncWrapper() {
         <NavigationReady />
         {/* Festival poster popup (SuperAdmin-uploaded), once per user per poster */}
         <FestivalPosterGate />
+        {/* SchoolIMS Smart Popup Manager — after dashboard bootstrap, never blocks login */}
+        <PopupQueueProvider />
 
         <Toast config={toastConfig} />
         {/* Global Animated Splash Screen Overlay removed - now native AnimatedSplash handles this */}

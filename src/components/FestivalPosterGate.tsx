@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Modal, View, Image, Pressable, Text, StyleSheet, Dimensions, Platform, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../hooks/useAuth';
+import { acquireOverlay, releaseOverlay } from '../features/popups/overlayLock';
 
 type FestivalPoster = {
   id: string;
@@ -54,9 +55,11 @@ export default function FestivalPosterGate() {
         if (!p || !p.image_url || cancelled) return;
         const seen = await AsyncStorage.getItem(seenKey(uid, p.id));
         if (seen || cancelled) return;
+        if (!acquireOverlay('festival')) return;
         // Mark seen at show-time so an app kill can't re-show it.
         await AsyncStorage.setItem(seenKey(uid, p.id), new Date().toISOString());
         if (!cancelled) setPoster(p);
+        else releaseOverlay('festival');
       } catch {
         // Silent: the poster popup must never affect app startup.
       }
@@ -78,18 +81,30 @@ export default function FestivalPosterGate() {
   if (!poster?.image_url) return null;
 
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={() => setPoster(null)}>
-      <Pressable style={styles.backdrop} onPress={() => setPoster(null)}>
+    <Modal visible transparent animationType="fade" onRequestClose={() => {
+      releaseOverlay('festival');
+      setPoster(null);
+    }}>
+      <Pressable style={styles.backdrop} onPress={() => {
+        releaseOverlay('festival');
+        setPoster(null);
+      }}>
         <Pressable style={styles.card} onPress={() => {}}>
           <Image
             source={{ uri: poster.image_url }}
             style={styles.image}
             resizeMode="contain"
-            onError={() => setPoster(null)}
+            onError={() => {
+              releaseOverlay('festival');
+              setPoster(null);
+            }}
           />
           <Pressable
             style={styles.closeBtn}
-            onPress={() => setPoster(null)}
+            onPress={() => {
+              releaseOverlay('festival');
+              setPoster(null);
+            }}
             hitSlop={12}
             accessibilityLabel="Close festival poster"
           >

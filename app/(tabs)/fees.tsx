@@ -19,6 +19,7 @@ import { useTranslation } from 'react-i18next';
 import { t_field } from '../../src/utils/lang';
 import { alertCompat } from '../../src/utils/crossPlatformAlert';
 import { useFeatureGuard } from '../../src/hooks/useFeatures';
+import ParentFinesSection from '../../src/features/fines/ParentFinesSection';
 export default function FeesScreen() {
   useFeatureGuard('nav.fees'); // deep-link guard: redirect Home if Fees is disabled
   const {
@@ -469,6 +470,8 @@ export default function FeesScreen() {
           </View>
         </View>
       </View>
+
+      <ParentFinesSection studentId={userProfile?.id || profile?.id || 'me'} />
 
       {/* TABS */}
       <View style={styles.tabContainer}>

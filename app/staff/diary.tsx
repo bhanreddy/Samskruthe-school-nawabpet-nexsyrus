@@ -28,7 +28,9 @@ import Toast from 'react-native-toast-message';
 import StaffHeader from '../../src/components/StaffHeader';
 import ViewAsBanner from '../../src/components/ViewAsBanner';
 import { useEffectiveStaffId } from '../../src/hooks/useEffectiveStaffId';
+import { useLocalSearchParams } from 'expo-router';
 import { DiaryService, DiaryEntry, TeacherService, TeacherClassAssignment } from '../../src/services/commonServices';
+import { AcademicPlannerService } from '../../src/services/academicPlannerService';
 import { SmartDiaryService, type ClassDiaryEntry, type ClassTeacherSection, type DiaryTemplate, type SmartCurrentClass, type SmartRecentEntry } from '../../src/services/smartDiaryService';
 import { enqueueDiary, flushDiaryQueue, startDiaryQueueListener, readPendingClassDiary, writePendingClassDiary } from '../../src/services/diaryOfflineQueue';
 import { persistentQueryCache } from '../../src/services/persistentQueryCache';
@@ -172,6 +174,8 @@ function relativeDayLabel(ymd: string) {
 
 export default function StaffDiary() {
   const { user } = useAuth();
+  const params = useLocalSearchParams<{ academicPlanItemId?: string }>();
+  const [linkedPlanItemId, setLinkedPlanItemId] = useState<string | null>(null);
   const { t } = useTranslation();
   const TE = t('staffDiary', { returnObjects: true }) as any;
   const { theme, isDark } = useTheme();
@@ -218,6 +222,20 @@ export default function StaffDiary() {
   const [manualTitle, setManualTitle] = useState('');
   const [manualContent, setManualContent] = useState('');
   const [manualDue, setManualDue] = useState(todayYmd);
+
+  useEffect(() => {
+    const planItemId = Array.isArray(params.academicPlanItemId) ? params.academicPlanItemId[0] : params.academicPlanItemId;
+    if (!planItemId) return;
+    setLinkedPlanItemId(planItemId);
+    AcademicPlannerService.getDiaryTopic(planItemId)
+      .then((details: any) => {
+        if (details?.topic_title) {
+          setManualTitle(`${details.chapter_title} — ${details.topic_title}`);
+          setManualOpen(true);
+        }
+      })
+      .catch(() => {});
+  }, [params.academicPlanItemId]);
   const [classPickerOpen, setClassPickerOpen] = useState(false);
   const [sendToOpen, setSendToOpen] = useState(false);
   const [selectedTargets, setSelectedTargets] = useState<string[]>([]);
@@ -382,6 +400,7 @@ export default function StaffDiary() {
       extract_async: Boolean(input.extractAsync),
       time_to_publish_ms: Date.now() - openedAtRef.current,
       input_language: 'auto',
+      academic_plan_item_id: linkedPlanItemId || undefined,
     };
     setBusy(true);
     try {

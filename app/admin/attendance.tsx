@@ -15,7 +15,9 @@ import {
 import { alertCompat } from '../../src/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Crypto from 'expo-crypto';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { useTheme } from '../../src/hooks/useTheme';
 import AdminHeader from '../../src/components/AdminHeader';
 import LogoLoader from '../../src/components/LogoLoader';
@@ -26,6 +28,10 @@ import Animated, {
 } from 'react-native-reanimated';
 import { api } from '../../src/services/apiClient';
 import AppDatePicker, { toYMD } from '../../src/components/AppDatePicker';
+import StaffAttendanceCorrectionModal from '../../src/components/admin/StaffAttendanceCorrectionModal';
+import StaffDeviceManagementModal from '../../src/components/admin/StaffDeviceManagementModal';
+import CampusGeofenceModal from '../../src/components/admin/CampusGeofenceModal';
+import StaffAttendanceExceptionsModal from '../../src/components/admin/StaffAttendanceExceptionsModal';
 
 // ─── Claymorphism shadow helpers ──────────────────────────────────────────────
 function clay(isDark: boolean, raised: 'sm' | 'md' | 'lg' = 'md') {
@@ -225,11 +231,11 @@ function MiniStat({
 
 // ─── Staff Card ───────────────────────────────────────────────────────────────
 function StaffCard({
-  staff, index, isDark, cardBg, cardBorder, onSelectStatus, compact,
+  staff, index, isDark, cardBg, cardBorder, onSelectStatus, compact, onOpenCorrection,
 }: {
   staff: any; index: number; isDark: boolean;
   cardBg: string; cardBorder: string; onSelectStatus: (status: string) => void;
-  compact: boolean;
+  compact: boolean; onOpenCorrection?: (staff: any) => void;
 }) {
   const status = staff.status || 'absent';
   const meta = STATUS_META[status] ?? STATUS_META.absent;
@@ -294,16 +300,41 @@ function StaffCard({
                 numberOfLines={1}
               >
                 {staff.designation || 'Staff'}
+                {staff.verification_source ? (' • ' + (staff.verification_source === 'mobile_v2' ? 'Mobile V2' : staff.verification_source)) : ''}
               </Text>
+              {!!(staff.check_in_time || staff.check_out_time) && (
+                <Text style={{ fontSize: 10, color: '#10B981', fontWeight: '600', marginTop: 2 }}>
+                  {staff.check_in_time ? ('IN: ' + staff.check_in_time.slice(11, 16)) : ''} {staff.check_out_time ? ('OUT: ' + staff.check_out_time.slice(11, 16)) : ''}
+                </Text>
+              )}
             </View>
           </View>
 
-          <StatusSegment
-            status={status}
-            isDark={isDark}
-            onSelect={onSelectStatus}
-            stretch={compact}
-          />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <StatusSegment
+              status={status}
+              isDark={isDark}
+              onSelect={onSelectStatus}
+              stretch={compact}
+            />
+            {onOpenCorrection && (
+              <TouchableOpacity
+                onPress={(e) => {
+                  e?.stopPropagation?.();
+                  onOpenCorrection(staff);
+                }}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                style={{
+                  padding: 6,
+                  borderRadius: 8,
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+                }}
+                accessibilityLabel="Correct staff attendance"
+              >
+                <Ionicons name="create-outline" size={15} color={isDark ? '#C7D2FE' : '#6366F1'} />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </TouchableOpacity>
     </Animated.View>
@@ -387,6 +418,7 @@ function FilterMenu({
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function AdminAttendanceScreen() {
+  const router = useRouter();
   const { isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
@@ -397,6 +429,7 @@ export default function AdminAttendanceScreen() {
   const [loading, setLoading] = useState(true);
   const [staffList, setStaffList] = useState<any[]>([]);
   const originalStaffRef = React.useRef<any[]>([]);
+  const bulkSaveRequestKeyRef = React.useRef<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -405,6 +438,10 @@ export default function AdminAttendanceScreen() {
   const [deptFilter, setDeptFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<'dept' | 'status' | null>(null);
+  const [correctionStaff, setCorrectionStaff] = useState<any | null>(null);
+  const [deviceModalVisible, setDeviceModalVisible] = useState(false);
+  const [geofenceModalVisible, setGeofenceModalVisible] = useState(false);
+  const [exceptionsModalVisible, setExceptionsModalVisible] = useState(false);
 
   const scrollY = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler({
@@ -445,12 +482,14 @@ export default function AdminAttendanceScreen() {
   const onRefresh = () => { setRefreshing(true); fetchAttendance(); };
 
   const setStaffStatus = (staffId: string, status: string) => {
+    bulkSaveRequestKeyRef.current = null;
     setStaffList((prev) =>
       prev.map((s) => (s.staff_id === staffId ? { ...s, status } : s))
     );
   };
 
   const handleMarkAll = () => {
+    bulkSaveRequestKeyRef.current = null;
     const ids = new Set(filteredStaff.map((s) => s.staff_id));
     if (ids.size === 0) return;
     setStaffList((prev) =>
@@ -459,15 +498,31 @@ export default function AdminAttendanceScreen() {
   };
 
   const handleReset = () => {
+    bulkSaveRequestKeyRef.current = null;
     setStaffList(originalStaffRef.current.map((s) => ({ ...s })));
   };
 
   const submitAttendance = async () => {
     try {
       setIsSaving(true);
-      const records = staffList.map((s) => ({ staff_id: s.staff_id, status: s.status || 'absent' }));
-      await api.post('/attendance/staff', { date: selectedDate, attendance: records });
+      const originals = new Map(originalStaffRef.current.map((s) => [s.staff_id, s.status || null]));
+      const records = staffList
+        .map((s) => ({ staff_id: s.staff_id, status: s.status || 'absent' }))
+        .filter((row) => originals.get(row.staff_id) !== row.status);
+      if (records.length === 0) {
+        alertCompat('No Changes', 'There are no staff attendance changes to save.');
+        return;
+      }
+      const idempotencyKey = bulkSaveRequestKeyRef.current || Crypto.randomUUID();
+      bulkSaveRequestKeyRef.current = idempotencyKey;
+      await api.post('/attendance/staff', {
+        date: selectedDate,
+        attendance: records,
+        reason: 'Attendance sheet saved from the administrator portal',
+        idempotency_key: idempotencyKey,
+      });
       originalStaffRef.current = staffList.map((s) => ({ ...s }));
+      bulkSaveRequestKeyRef.current = null;
       alertCompat('✓ Saved', 'Attendance marked successfully.');
     } catch {
       alertCompat('Error', 'Failed to save attendance.');
@@ -546,7 +601,15 @@ export default function AdminAttendanceScreen() {
       <View style={[styles.orb1, { backgroundColor: orb1Color }]} />
       <View style={[styles.orb2, { backgroundColor: orb2Color }]} />
 
-      <AdminHeader title="Staff Attendance" showNotification scrollY={scrollY} />
+      <AdminHeader
+        title="Staff Attendance"
+        showNotification
+        scrollY={scrollY}
+        rightAction={{
+          icon: 'warning-outline',
+          onPress: () => router.push('/admin/attendance-risk' as any),
+        }}
+      />
 
       {loading && !refreshing ? (
         <View style={styles.loaderContainer}>
@@ -610,6 +673,69 @@ export default function AdminAttendanceScreen() {
                 onPress={() => toggleStatusFilter('half_day')}
               />
             </View>
+          </View>
+
+          {/* ── V2 Administration Actions Bar ─────────────────────── */}
+          <View style={{ flexDirection: 'row', gap: 8, marginHorizontal: 16, marginTop: 10, marginBottom: 4 }}>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setDeviceModalVisible(true)}
+              style={{
+                flex: 1,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                paddingVertical: 9,
+                borderRadius: 12,
+                backgroundColor: isDark ? 'rgba(99, 102, 241, 0.15)' : '#EEF2FF',
+                borderWidth: 1,
+                borderColor: 'rgba(99, 102, 241, 0.25)',
+                gap: 5,
+              }}
+            >
+              <Ionicons name="phone-portrait-outline" size={14} color="#6366F1" />
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#6366F1' }}>Devices</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setGeofenceModalVisible(true)}
+              style={{
+                flex: 1,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                paddingVertical: 9,
+                borderRadius: 12,
+                backgroundColor: isDark ? 'rgba(16, 185, 129, 0.15)' : '#D1FAE5',
+                borderWidth: 1,
+                borderColor: 'rgba(16, 185, 129, 0.25)',
+                gap: 5,
+              }}
+            >
+              <Ionicons name="navigate-outline" size={14} color="#10B981" />
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#10B981' }}>Geofence</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => setExceptionsModalVisible(true)}
+              style={{
+                flex: 1,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                paddingVertical: 9,
+                borderRadius: 12,
+                backgroundColor: isDark ? 'rgba(245, 158, 11, 0.15)' : '#FEF3C7',
+                borderWidth: 1,
+                borderColor: 'rgba(245, 158, 11, 0.25)',
+                gap: 5,
+              }}
+            >
+              <Ionicons name="shield-outline" size={14} color="#F59E0B" />
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#F59E0B' }}>Exceptions</Text>
+            </TouchableOpacity>
           </View>
 
           {/* ── Scrollable: search, filters, staff, actions ──────────────── */}
@@ -749,6 +875,7 @@ export default function AdminAttendanceScreen() {
                 cardBorder={cardBorder}
                 compact={isCompact}
                 onSelectStatus={(status) => setStaffStatus(item.staff_id, status)}
+                onOpenCorrection={(s) => setCorrectionStaff(s)}
               />
             )}
             ListFooterComponent={
@@ -857,6 +984,33 @@ export default function AdminAttendanceScreen() {
         isDark={isDark}
         onSelect={setStatusFilter}
         onClose={() => setOpenMenu(null)}
+      />
+
+      <StaffAttendanceCorrectionModal
+        visible={!!correctionStaff}
+        staff={correctionStaff}
+        date={selectedDate}
+        isDark={isDark}
+        onClose={() => setCorrectionStaff(null)}
+        onSuccess={() => fetchAttendance()}
+      />
+
+      <StaffDeviceManagementModal
+        visible={deviceModalVisible}
+        isDark={isDark}
+        onClose={() => setDeviceModalVisible(false)}
+      />
+
+      <CampusGeofenceModal
+        visible={geofenceModalVisible}
+        isDark={isDark}
+        onClose={() => setGeofenceModalVisible(false)}
+      />
+
+      <StaffAttendanceExceptionsModal
+        visible={exceptionsModalVisible}
+        isDark={isDark}
+        onClose={() => setExceptionsModalVisible(false)}
       />
 
     </View>

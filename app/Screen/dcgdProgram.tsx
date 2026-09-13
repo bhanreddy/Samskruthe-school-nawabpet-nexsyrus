@@ -222,7 +222,7 @@ const DCGDProgramScreen = () => {
                 No content available yet
               </Text>
               <Text style={[styles.emptyHint, { color: isDark ? '#94A3B8' : '#64748B' }]}>
-                Your school's Super Admin will add learning materials here soon. Check back later!
+                Your school&apos;s Super Admin will add learning materials here soon. Check back later!
               </Text>
             </View>
           ) : (

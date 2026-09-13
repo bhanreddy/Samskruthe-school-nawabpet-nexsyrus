@@ -1,19 +1,21 @@
 import { useEffect } from 'react';
-import { useRouter, useSegments, useRootNavigationState } from 'expo-router';
+import { useRouter, useSegments, useRootNavigationState, useGlobalSearchParams } from 'expo-router';
 import { useAuth } from './useAuth';
 import { AuthService } from '../services/authService';
 import { isStudentRole, isStaffPortalRole } from '../utils/roleHelpers';
 import { getHomeRouteForRole } from '../utils/portalRoutes';
+import { getStaffPortalSession } from '../services/staffPortalSession';
 
 // List of public routes that don't require authentication.
 // 'welcome' is the branded landing; 'login' is the single unified login screen.
-const PUBLIC_ROUTES = ['welcome', 'login', 'signup', 'tc-qa'];
+const PUBLIC_ROUTES = ['welcome', 'login', 'qr-login', 'signup', 'tc-qa'];
 
 export function useAuthGuard() {
   const { user, loading } = useAuth();
   const router = useRouter();
   const segments = useSegments();
   const rootNavigationState = useRootNavigationState();
+  const searchParams = useGlobalSearchParams<{ mode?: string | string[] }>();
 
   useEffect(() => {
     if (!rootNavigationState?.key) return; // Wait until router is ready
@@ -26,12 +28,13 @@ export function useAuthGuard() {
     // Check if we are in a public route group
     const inAuthGroup = PUBLIC_ROUTES.includes(currentSegment);
 
-    // Check specific groups
     const inTabsGroup = segments[0] === '(tabs)';
     const inAdminGroup = segments[0] === 'admin';
     const inStaffGroup = segments[0] === 'staff';
     const inAccountsGroup = segments[0] === 'accounts';
     const inDriverGroup = segments[0] === 'driver';
+    const inAdmissionPublic = segments[0] === 'admission' && (segments[1] === 'login' || segments[1] === 'enquiry');
+    const inAdmissionProtected = segments[0] === 'admission' && segments[1] === 'dashboard';
 
     // 1. User IS logged in
     if (user) {
@@ -41,22 +44,31 @@ export function useAuthGuard() {
       const normalizedHome = homeRoute.replace(/^\//, '');
 
       // Check if current route matches home route to avoid infinite replacement
-      // Check if current route matches home route to avoid infinite replacement
       const currentRoute = segments.join('/');
 
       // debug logs
       if (__DEV__) {}
 
       // If they are on a route matching their home dashboard strictly, we're fine.
-      // But we don't want to return early if they are deeper in the route, we just want to ensure
-      // they aren't on another role's route.
       if (currentRoute === normalizedHome) {
-        // we're safely on home.
+        return;
+      }
+
+      // If logged-in applicant tries to access other portals or admission public forms, send to dashboard
+      if (roleCode === 'applicant') {
+        if (!inAdmissionProtected) {
+          router.replace(homeRoute);
+          return;
+        }
+      } else if (inAdmissionPublic) {
+        // Any other logged-in user on admission public pages
+        router.replace(homeRoute);
         return;
       }
 
       // Strict Segment Guarding for Role Based Access
-      if (inAdminGroup && !['admin', 'principal'].includes(roleCode)) {
+      const viewingStaffAsAdmin = Boolean(getStaffPortalSession().actorUserId);
+      if (inAdminGroup && !['admin', 'principal'].includes(roleCode) && !viewingStaffAsAdmin) {
         router.replace(homeRoute);
         return;
       }
@@ -90,9 +102,14 @@ export function useAuthGuard() {
       // We do NOT want to force the user to `homeRoute` if they are deeper in a valid protected group.
       // That breaks deep linking from notifications.
 
-      // Only redirect to home if they are explicitly sitting on an auth/public screen 
+      // Only redirect to home if they are explicitly sitting on an auth/public screen
       // We ignore `currentRoute === ''` to allow AnimatedSplash to finish animating.
       if (inAuthGroup) {
+        const qrMode = searchParams.mode;
+        const addingViaQr = currentSegment === 'qr-login' && (
+          qrMode === 'add' || (Array.isArray(qrMode) && qrMode.includes('add'))
+        );
+        if (addingViaQr) return;
         if (__DEV__) {}
         router.replace(homeRoute);
       }
@@ -107,6 +124,10 @@ export function useAuthGuard() {
 
     } else {
       // 2. User is NOT logged in
+      if (inAdmissionProtected) {
+        router.replace('/admission/login');
+        return;
+      }
       // If trying to access protected areas, redirect to login
       if (inTabsGroup || inAdminGroup || inStaffGroup || inAccountsGroup || inDriverGroup) {
         if (__DEV__) {}
@@ -129,5 +150,5 @@ export function useAuthGuard() {
       }
     }
 
-  }, [user, loading, segments, rootNavigationState?.key]);
+  }, [user, loading, segments, rootNavigationState?.key, searchParams.mode]);
 }

@@ -33,6 +33,14 @@ export default function NotificationsScreen() {
             Your recent school updates
           </Text>
         </View>
+        <Pressable
+          onPress={() => router.push('/updates' as any)}
+          accessibilityRole="button"
+          accessibilityLabel="Open missed updates"
+          style={({ pressed }) => [styles.backButton, { backgroundColor: isDark ? '#1C1E38' : '#FFFFFF', borderColor: theme.colors.border }, pressed && styles.pressed]}
+        >
+          <Ionicons name="megaphone-outline" size={18} color={theme.colors.textStrong} />
+        </Pressable>
       </View>
       <NotificationInboxList />
     </View>

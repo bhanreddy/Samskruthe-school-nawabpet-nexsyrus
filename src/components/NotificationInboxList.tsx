@@ -48,7 +48,10 @@ export default function NotificationInboxList({ onSendPress }: Props) {
   }, []);
 
   useFocusEffect(useCallback(() => {
-    void load();
+    void (async () => {
+      await notificationInboxService.markAllRead();
+      await load();
+    })();
   }, [load]));
 
   const open = useCallback(async (item: InboxNotification) => {

@@ -1,14 +1,13 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Link } from 'expo-router';
 import { useTheme } from '../hooks/useTheme';
-import { clearStaffPortalSession } from '../services/staffPortalSession';
+import { exitStaffPortalToAdmin } from '../services/staffPortalExit';
 
 export default function ViewAsBanner({ name }: { name?: string }) {
   const { isDark } = useTheme();
   const exitPortal = () => {
-    clearStaffPortalSession();
+    void exitStaffPortalToAdmin();
   };
   return (
     <View
@@ -22,14 +21,12 @@ export default function ViewAsBanner({ name }: { name?: string }) {
     >
       <Ionicons name="create-outline" size={14} color="#047857" style={{ marginRight: 7 }} />
       <Text style={styles.text} numberOfLines={2}>
-        Managing {name || 'staff'}'s portal — Admin read/write access
+        Managing {name || 'staff'}&apos;s portal — Admin read/write access
       </Text>
-      <Link href="/admin/manage-staff" replace asChild>
-        <TouchableOpacity onPress={exitPortal} style={styles.exit} accessibilityRole="link" accessibilityLabel="Exit staff portal">
-          <Text style={styles.exitText}>Exit</Text>
-          <Ionicons name="close" size={14} color="#047857" />
-        </TouchableOpacity>
-      </Link>
+      <TouchableOpacity onPress={exitPortal} style={styles.exit} accessibilityRole="button" accessibilityLabel="Exit staff portal">
+        <Text style={styles.exitText}>Exit</Text>
+        <Ionicons name="close" size={14} color="#047857" />
+      </TouchableOpacity>
     </View>
   );
 }

@@ -8,7 +8,9 @@ import { API_URL, SCHOOL_ID } from '../constants/school';
 import { supabase } from './supabaseConfig';
 import { getOrCreateDeviceId } from './deviceId';
 import { getActiveContextId } from './activeContextStore';
-import { clearStaffPortalSession, getStaffPortalSession } from './staffPortalSession';
+import { clearStaffPortalSession, getStaffPortalSession, shouldAttachStaffPortalHeader } from './staffPortalSession';
+import { staffBiometricService } from './staffBiometricService';
+import * as Crypto from 'expo-crypto';
 
 /**
  * Cross-platform error alert — always uses the illustrated CustomAlert popup.
@@ -218,6 +220,8 @@ export interface APIOptions extends RequestInit {
   timeoutMs?: number;
   /** Frozen delegated staff target for retries and GET de-duplication. */
   _staffPortalId?: string;
+  /** Public endpoint: never attach or recover a persisted Supabase session. */
+  omitAuth?: boolean;
 }
 
 function buildGetDedupeKey(endpoint: string, method: string, staffPortalId?: string): string | null {
@@ -232,7 +236,8 @@ export async function apiRequest<T>(
   options: APIOptions = {})
   : Promise<T> {
   const method = (options.method || 'GET').toUpperCase();
-  const staffPortalId = options._staffPortalId ?? getStaffPortalSession().staffId;
+  const staffPortalId = options._staffPortalId
+    ?? (shouldAttachStaffPortalHeader(endpoint) ? getStaffPortalSession().staffId : undefined);
   const frozenOptions = staffPortalId && !options._staffPortalId
     ? { ...options, _staffPortalId: staffPortalId }
     : options;
@@ -268,18 +273,18 @@ async function apiRequestInner<T>(
   endpoint: string,
   options: APIOptions = {})
   : Promise<T> {
-  const { silent: rawSilent, sendActiveContext, _isRetry, _retryCount = 0, _multipart, timeoutMs = 60000, _staffPortalId, ...fetchOptions } = options;
+  const { silent: rawSilent, sendActiveContext, _isRetry, _retryCount = 0, _multipart, timeoutMs = 60000, _staffPortalId, omitAuth = false, ...fetchOptions } = options;
   // Suppress blocking error dialogs for transient cross-role failures while an
   // account/portal switch is settling (the request still runs and still throws).
   const silent = rawSilent || transientAlertsSuppressed();
   const isMultipart = _multipart === true;
-  const { data: { session: liveSession } } = await supabase.auth.getSession();
+  const liveSession = omitAuth ? null : (await supabase.auth.getSession()).data.session;
   let session = liveSession;
   const sessionExpiresSoon =
     !session?.expires_at ||
     session.expires_at <= Math.floor(Date.now() / 1000) + EXPIRY_SKEW_SECONDS;
   if (
-    sessionExpiresSoon &&
+    !omitAuth && sessionExpiresSoon &&
     !_isRetry &&
     canRecoverAuthForEndpoint(endpoint)
   ) {
@@ -306,9 +311,11 @@ async function apiRequestInner<T>(
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
-  if (_staffPortalId) {
+  if (_staffPortalId && !omitAuth) {
     headers['X-Staff-Portal-Id'] = _staffPortalId;
   }
+
+  const method = (fetchOptions.method || 'GET').toUpperCase();
 
   // A portal switch changes the active server-side authorization scope, not
   // merely the screen shown by the app. Previously these headers were only
@@ -318,16 +325,41 @@ async function apiRequestInner<T>(
   //
   // Vault account switching uses a different JWT and clears this stored value,
   // so it remains isolated from the selected portal context.
+  let deviceProofExpected = false;
   try {
     const deviceId = await getOrCreateDeviceId();
     if (deviceId) headers['X-Device-Id'] = deviceId;
-    const activeContextId = await getActiveContextId();
+    const activeContextId = omitAuth ? null : await getActiveContextId();
     if (activeContextId) headers['X-Active-Context'] = activeContextId;
+    const reg = await staffBiometricService.getStoredRegistration();
+    if (reg.devicePublicKey && reg.keyAlias) {
+      const headerKey = reg.devicePublicKey.replace(/\r?\n/g, '\\n');
+      headers['X-Device-Public-Key'] = headerKey;
+      headers['X-Device-Session-Key'] = headerKey;
+      const proofPath = endpoint.split('?')[0];
+      if (proofPath === '/attendance/v2/challenge' || proofPath === '/attendance/v2/verify') {
+        deviceProofExpected = true;
+        const proofTimestamp = String(Date.now());
+        const proofNonce = Crypto.randomUUID();
+        const proofPayload = `staff-device-session:v1:${proofTimestamp}:${proofNonce}:${method}:${proofPath}`;
+        headers['X-Device-Proof-Timestamp'] = proofTimestamp;
+        headers['X-Device-Proof-Nonce'] = proofNonce;
+        headers['X-Device-Proof'] = await staffBiometricService.signDeviceSession(proofPayload, reg.keyAlias);
+      }
+    }
   } catch {
-    // Context persistence is best-effort; never block an otherwise valid API request.
+    if (deviceProofExpected) {
+      clearTimeout(timeoutId);
+      throw new APIError(
+        'This request could not be signed by the approved staff device. Please reopen the app or contact the administrator.',
+        403,
+        undefined,
+        undefined,
+        'DEVICE_PROOF_FAILED'
+      );
+    }
+    // Context persistence is best-effort before a staff device is registered.
   }
-
-  const method = (fetchOptions.method || 'GET').toUpperCase();
 
   // SchoolIMS: every request MUST include school_id (GET/DELETE: query; POST/PUT/PATCH: body)
   let finalEndpoint = endpoint;
@@ -375,6 +407,23 @@ async function apiRequestInner<T>(
 
       // Handle unauthorized (401)
       if (response.status === 401) {
+        if (endpoint.split('?')[0] === '/auth/qr/resolve') {
+          throw new APIError(
+            errorData.error || 'This login QR is no longer valid.',
+            401,
+            undefined,
+            requestId,
+            errorData.code,
+          );
+        }
+        // A rejected attendance signature/challenge is not an expired login.
+        // Preserve protocol codes and never replay it through session recovery.
+        if (endpoint.split('?')[0] === '/attendance/v2/verify' && [
+          'INVALID_SIGNATURE', 'PAYLOAD_CONTEXT_MISMATCH', 'CHALLENGE_NOT_FOUND',
+          'CHALLENGE_ALREADY_USED', 'CHALLENGE_EXPIRED', 'DEVICE_NOT_APPROVED',
+        ].includes(errorData.code)) {
+          throw new APIError(errorData.error, 401, undefined, requestId, errorData.code);
+        }
 
         // 1. IGNORE Login/Refresh endpoints (invalid credentials, not session expiry)
         if (endpoint.includes('/login') || endpoint.includes('/refresh')) {
@@ -498,7 +547,8 @@ async function apiRequestInner<T>(
         genericMsg,
         response.status,
         undefined,
-        requestId
+        requestId,
+        errorData.code
       );
     }
 
@@ -558,7 +608,9 @@ export async function downloadFile(endpoint: string, filename: string): Promise<
   const url = `${API_BASE_URL}${finalEndpoint}`;
 
   const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
-  const staffPortalId = getStaffPortalSession().staffId;
+  const staffPortalId = shouldAttachStaffPortalHeader(endpoint)
+    ? getStaffPortalSession().staffId
+    : undefined;
   if (staffPortalId) headers['X-Staff-Portal-Id'] = staffPortalId;
   try {
     const deviceId = await getOrCreateDeviceId();
@@ -628,8 +680,14 @@ export const api = {
   get: <T,>(endpoint: string, params?: Record<string, any>, options?: APIOptions): Promise<T> => {
     let queryString = '';
     if (params) {
-      const cleanParams = Object.fromEntries(
-        Object.entries(params).filter(([_, v]) => v !== undefined)
+      const actualParams =
+        params.params && typeof params.params === 'object' && !Array.isArray(params.params)
+          ? params.params
+          : params;
+      const cleanParams: Record<string, string> = Object.fromEntries(
+        Object.entries(actualParams)
+          .filter(([_, v]) => v !== undefined)
+          .map(([k, v]) => [k, String(v)])
       );
       queryString = '?' + new URLSearchParams(cleanParams).toString();
     }
@@ -677,3 +735,6 @@ export const api = {
     return downloadFile(endpoint, filename);
   },
 };
+
+export const apiClient = api;
+

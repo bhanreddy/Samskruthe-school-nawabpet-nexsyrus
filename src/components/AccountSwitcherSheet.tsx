@@ -236,6 +236,11 @@ export default function AccountSwitcherSheet({ visible, onClose }: Props) {
     }
   };
 
+  const openQrAdd = () => {
+    onClose();
+    router.push('/qr-login?mode=add' as never);
+  };
+
   const onAdd = async () => {
     if (addBusy) return;
     if (!addEmail.trim() || !addPassword) {
@@ -486,6 +491,7 @@ export default function AccountSwitcherSheet({ visible, onClose }: Props) {
                 })}
 
                 {!addMode ? (
+                  <>
                   <Pressable
                     style={({ pressed }) => [
                       s.addRow,
@@ -506,6 +512,29 @@ export default function AccountSwitcherSheet({ visible, onClose }: Props) {
                       <Ionicons name="chevron-forward" size={14} color={primary} />
                     </View>
                   </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [
+                      s.addRow,
+                      clayRow(isDark, primary),
+                      pressed && { opacity: 0.9, transform: [{ scale: 0.985 }] },
+                    ]}
+                    disabled={!!busyId}
+                    onPress={openQrAdd}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('qrLogin.scanCtaAdd', 'Scan QR to add account')}
+                  >
+                    <View style={[s.addIcon, clayPuck(isDark, primary)]}>
+                      <Ionicons name="scan-outline" size={22} color={primary} />
+                    </View>
+                    <View style={s.rowMeta}>
+                      <Text style={[s.rowName, { color: primary }]}>{t('qrLogin.scanCtaAdd', 'Scan QR to add account')}</Text>
+                      <Text style={s.rowSubMuted}>{t('qrLogin.scanHint', 'Quick and secure access with your private school card')}</Text>
+                    </View>
+                    <View style={[s.chevronPuck, clayPuck(isDark, primary)]}>
+                      <Ionicons name="chevron-forward" size={14} color={primary} />
+                    </View>
+                  </Pressable>
+                  </>
                 ) : (
                   <Animated.View entering={FadeInDown.duration(260)} style={[s.addForm, clayCard(isDark, 'md')]}>
                     <View style={s.addFormHeader}>
@@ -577,6 +606,32 @@ export default function AccountSwitcherSheet({ visible, onClose }: Props) {
                     </View>
 
                     {addError ? <Text style={s.errorText}>{addError}</Text> : null}
+
+                    <View style={s.qrDividerRow}>
+                      <View style={s.qrDivider} />
+                      <Text style={s.qrDividerText}>{t('qrLogin.or', 'OR')}</Text>
+                      <View style={s.qrDivider} />
+                    </View>
+                    <Pressable
+                      style={({ pressed }) => [
+                        s.qrAddButton,
+                        clayRow(isDark, primary),
+                        pressed && { opacity: 0.9, transform: [{ scale: 0.985 }] },
+                      ]}
+                      disabled={addBusy}
+                      onPress={openQrAdd}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('qrLogin.scanCtaAdd', 'Scan QR to add account')}
+                    >
+                      <View style={[s.qrAddIcon, clayPuck(isDark, primary)]}>
+                        <Ionicons name="scan-outline" size={18} color={primary} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[s.rowName, { color: primary }]}>{t('qrLogin.scanCtaAdd', 'Scan QR to add account')}</Text>
+                        <Text style={s.rowSubMuted}>{t('qrLogin.scanHint', 'Quick and secure access with your private school card')}</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={16} color={primary} />
+                    </Pressable>
 
                     <View style={s.addActions}>
                       <Pressable
@@ -963,6 +1018,43 @@ const getStyles = (colors: any, isDark: boolean, primary: string) =>
       fontWeight: '600',
     },
     addActions: { flexDirection: 'row', gap: 12, marginTop: 16 },
+    qrDividerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginTop: 16,
+    },
+    qrDivider: {
+      flex: 1,
+      height: 1,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(148,163,184,0.35)',
+    },
+    qrDividerText: {
+      fontSize: 11,
+      fontWeight: '800',
+      letterSpacing: 0.8,
+      color: isDark ? '#64748B' : '#94A3B8',
+    },
+    qrAddButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      marginTop: 12,
+      paddingVertical: 12,
+      paddingHorizontal: 12,
+      borderRadius: 18,
+      backgroundColor: isDark ? schoolColorWithAlpha(primary, 0.14) : schoolColorWithAlpha(primary, 0.08),
+      borderWidth: 1,
+      borderColor: isDark ? schoolColorWithAlpha(primary, 0.35) : schoolColorWithAlpha(primary, 0.22),
+    },
+    qrAddIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: isDark ? schoolColorWithAlpha(primary, 0.2) : '#F4F7FD',
+    },
     btn: {
       flex: 1,
       paddingVertical: 15,

@@ -10,6 +10,9 @@ import type {
 } from '../types/models';
 import { sortStudentFeesByConfiguredOrder } from '../utils/feeOrdering';
 import { prepareStudentPhoto, STUDENT_PHOTO_MAX_BYTES } from '../utils/studentPhoto';
+import type { HeroSlideItem } from './schoolHeroSlidesService';
+import type { CelebrationSlideItem } from './celebrationTypes';
+import type { SchoolStoryAuthor } from './schoolStoriesService';
 
 /** Aggregated payload from GET /student/dashboard (one HTTP call for the student home tab). */
 export interface StudentDashboardResponse {
@@ -26,6 +29,9 @@ export interface StudentDashboardResponse {
     };
     upcoming_fee: unknown | null;
     timetable_today: unknown[];
+    unread_notification_count?: number;
+    hero_slides?: Array<HeroSlideItem | CelebrationSlideItem>;
+    school_stories?: SchoolStoryAuthor[];
 }
 
 // API Request/Response types matching Backend logic

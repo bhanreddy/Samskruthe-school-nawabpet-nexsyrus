@@ -11,7 +11,6 @@ import {
     ViewStyle,
     LayoutChangeEvent,
 } from 'react-native';
-import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, {
     FadeInDown,
@@ -32,7 +31,8 @@ import Animated, {
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import StaffTodayAttendanceCard from '../../src/components/StaffTodayAttendanceCard';
 import { useTheme } from '../../src/hooks/useTheme';
 import StaffHeader from '../../src/components/StaffHeader';
 import ViewAsBanner from '../../src/components/ViewAsBanner';
@@ -253,7 +253,7 @@ function AttendanceRing({ stats, isDark, size, strokeWidth }: { stats: Stats; is
     const percentage = total > 0 ? Math.round((stats.present / total) * 100) : 0;
     const progress = useSharedValue(0);
 
-    const arcs = useMemo(() => buildArcs(stats, circumference), [stats.present, stats.half, stats.absent, circumference]);
+    const arcs = useMemo(() => buildArcs(stats, circumference), [stats, circumference]);
     const trackColor = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(17,24,39,0.06)';
 
     useEffect(() => {
@@ -476,8 +476,8 @@ function AttendanceSkeleton({ isDark, cardBg, cardBorder }: { isDark: boolean; c
 // ─── Main screen ────────────────────────────────────────────────────────────
 export default function StaffMyAttendanceScreen() {
     const { isDark } = useTheme();
-    const { t } = useTranslation();
     const router = useRouter();
+    const params = useLocalSearchParams<{ autoAction?: 'check_in' | 'check_out' }>();
     const { isViewingAsAdmin, viewAsName } = useEffectiveStaffId();
 
     const [refreshing, setRefreshing] = useState(false);
@@ -578,6 +578,14 @@ export default function StaffMyAttendanceScreen() {
                         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={isDark ? '#FFF' : '#7C6FFF'} />
                     }
                 >
+                    {/* ── Today V2 Biometric Attendance Card ────────────────────── */}
+                    <StaffTodayAttendanceCard
+                        isDark={isDark}
+                        isViewingAsAdmin={isViewingAsAdmin}
+                        onAttendanceSuccess={fetchAttendance}
+                        autoAction={params.autoAction}
+                    />
+
                     {/* ── Hero: clay overview card with attendance ring ─────────────── */}
                     <Animated.View
                         entering={FadeInDown.duration(500).springify()}

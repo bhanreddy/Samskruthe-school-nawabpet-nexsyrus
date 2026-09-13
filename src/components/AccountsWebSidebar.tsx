@@ -63,6 +63,21 @@ export const ACCOUNTS_SIDEBAR_NAV: AccountsSidebarNavItem[] = [
     category: 'Fees & payments',
   },
   {
+    title: 'Fines & Penalties',
+    icon: 'shield-checkmark-outline',
+    route: '/accounts/fines',
+    gradient: ['#D97706', '#F59E0B'],
+    category: 'Fees & payments',
+    permission: 'fees.view',
+  },
+  {
+    title: 'Event Collections',
+    icon: 'ticket-outline',
+    route: '/accounts/event-collections',
+    gradient: ['#4F46E5', '#06B6D4'],
+    category: 'Fees & payments',
+  },
+  {
     title: 'Reports',
     icon: 'bar-chart-outline',
     route: '/accounts/invoices',
@@ -106,6 +121,13 @@ export const ACCOUNTS_SIDEBAR_NAV: AccountsSidebarNavItem[] = [
     category: 'Admissions',
   },
   {
+    title: 'Student Login QR Codes',
+    icon: 'qr-code-outline',
+    route: '/accounts/student-login-qr',
+    gradient: ['#5B21B6', '#8B5CF6'],
+    category: 'Student access',
+  },
+  {
     title: 'Hostel Students',
     icon: 'bed-outline',
     route: '/accounts/hostel',
@@ -114,11 +136,11 @@ export const ACCOUNTS_SIDEBAR_NAV: AccountsSidebarNavItem[] = [
     permission: 'hostel.allocate',
   },
   {
-    title: 'Settings',
-    icon: 'settings-outline',
-    route: '/accounts/settings',
-    gradient: ['#64748B', '#475569'],
-    category: 'Preferences',
+    title: 'Updates',
+    icon: 'notifications-circle-outline',
+    route: '/accounts/updates',
+    gradient: ['#4F46E5', '#6366F1'],
+    category: 'Workspace',
   },
 ];
 
@@ -284,7 +306,7 @@ export default function AccountsWebSidebar({
       ['/accounts/dashboard', '/accounts/fees', '/accounts/invoices', '/accounts/marks', '/accounts/exams', '/accounts/certificate-generator'].includes(i.route),
     );
     const people = items.filter((i) =>
-      ['/accounts/manage-users', '/accounts/pending-enrollments'].includes(i.route),
+      ['/accounts/manage-users', '/accounts/pending-enrollments', '/accounts/student-login-qr'].includes(i.route),
     );
     const system = items.filter((i) => i.route === '/accounts/settings');
     return [

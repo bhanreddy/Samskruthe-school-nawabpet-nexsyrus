@@ -12,7 +12,6 @@ if (Platform.OS === 'web') {
 import 'react-native-gesture-handler';
 import './src/services/notificationManager';
 import { notificationManager } from './src/services/notificationManager';
-import { Platform } from 'react-native';
 import messaging from '@react-native-firebase/messaging';
 import * as TaskManager from 'expo-task-manager';
 import * as Notifications from 'expo-notifications';
