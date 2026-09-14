@@ -19,6 +19,7 @@ import AdminHeader from '../../../src/components/AdminHeader';
 import LogoLoader from '../../../src/components/LogoLoader';
 import { useAuth } from '../../../src/hooks/useAuth';
 import { useTheme } from '../../../src/hooks/useTheme';
+import { FeatureRouteGuard, FEATURE_KEYS } from '../../../src/features/feature-access';
 import type {
   AcademicSummary,
   AttendanceSummary,
@@ -617,7 +618,9 @@ export default function AnalyticsMetricScreen() {
     return <EmptyState isDark={isDark} />;
   };
 
-  return <View style={[styles.root, { backgroundColor: isDark ? '#090E18' : '#F7F9FC' }]}>
+  return (
+    <FeatureRouteGuard feature={FEATURE_KEYS.ANALYTICS}>
+      <View style={[styles.root, { backgroundColor: isDark ? '#090E18' : '#F7F9FC' }]}>
     <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
     <AdminHeader title={definition.title} showBackButton />
     <View pointerEvents="none" style={StyleSheet.absoluteFill}><View style={[styles.ambient, { backgroundColor: `${definition.accent}12`, top: 130, right: -100 }]} /><View style={[styles.ambient, { backgroundColor: '#8B5CF60B', top: 460, left: -120 }]} /></View>
@@ -782,8 +785,10 @@ export default function AnalyticsMetricScreen() {
       </LinearGradient>
       <View style={styles.updatedRow}><View style={[styles.updatedDot, { backgroundColor: definition.accent }]} /><Text style={styles.updatedText}>{generatedAt ? `Last synchronized ${new Date(generatedAt).toLocaleString()}` : 'Waiting for the first synchronized snapshot'}</Text></View>
       </> : null}
-    </ScrollView>
-  </View>;
+      </ScrollView>
+    </View>
+    </FeatureRouteGuard>
+  );
 }
 
 const styles = StyleSheet.create({

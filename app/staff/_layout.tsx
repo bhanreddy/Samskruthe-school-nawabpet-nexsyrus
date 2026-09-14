@@ -78,8 +78,13 @@ export default function StaffLayout() {
             <MaterialTopTabs.Screen name="student-portfolio" options={hiddenScreenOptions} />
             <MaterialTopTabs.Screen name="roll-numbers" options={{ ...hiddenScreenOptions, title: 'Roll Numbers' } as any} />
             <MaterialTopTabs.Screen name="progress-card-assistant" options={{ ...hiddenScreenOptions, title: 'Progress Cards' } as any} />
+            <MaterialTopTabs.Screen name="anecdotes" options={{ ...hiddenScreenOptions, title: 'Anecdotes', headerShown: false } as any} />
+            <MaterialTopTabs.Screen name="student-intelligence" options={{ ...hiddenScreenOptions, title: 'Student Intelligence', headerShown: false } as any} />
             <MaterialTopTabs.Screen name="admissions" options={{ ...hiddenScreenOptions, title: 'Admissions', headerShown: false } as any} />
             <MaterialTopTabs.Screen name="admission-detail" options={{ ...hiddenScreenOptions, title: 'Application', headerShown: false } as any} />
+            <MaterialTopTabs.Screen name="omr-scanner" options={{ ...hiddenScreenOptions, title: 'OMR Scanner', headerShown: false } as any} />
+            <MaterialTopTabs.Screen name="omr-review" options={{ ...hiddenScreenOptions, title: 'OMR Review', headerShown: false } as any} />
+            <MaterialTopTabs.Screen name="omr-answer-key" options={{ ...hiddenScreenOptions, title: 'OMR Answer Key', headerShown: false } as any} />
         </MaterialTopTabs>
     );
 }

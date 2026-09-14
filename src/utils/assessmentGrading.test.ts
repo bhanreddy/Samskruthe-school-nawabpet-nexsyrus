@@ -6,6 +6,7 @@ import {
   isAbsentAssessmentInput,
   isComponentAssessmentAbsent,
   isValidAssessmentInput,
+  numericOrNullComponentMark,
   normalizeAssessmentInput,
   rankAssessmentScores,
   updateComponentAssessmentInput,
@@ -145,13 +146,22 @@ describe('assessment grading', () => {
     })).toBe(true);
   });
 
-  it('marks a component assessment absent when only one component contains an absence mark', () => {
+  it('keeps a student eligible when only slip test or one component is absent', () => {
     expect(isComponentAssessmentAbsent({
       participation: '8',
       writtenWork: '7',
       projectWork: '6',
       slipTest: 'Ab',
-    })).toBe(true);
+    })).toBe(false);
+    expect(calculateComponentAssessment({
+      participation: '8',
+      writtenWork: '7',
+      projectWork: '6',
+      slipTest: 'A',
+    })).toMatchObject({
+      obtained: 21,
+      maximum: 50,
+    });
     expect(isComponentAssessmentAbsent({
       participation: '8',
       writtenWork: '7',
@@ -172,5 +182,11 @@ describe('assessment grading', () => {
       projectWork: '6',
       slipTest: 'A',
     });
+  });
+
+  it('stores absent components as null so other marks can still upload', () => {
+    expect(numericOrNullComponentMark('A')).toBeNull();
+    expect(numericOrNullComponentMark('AB')).toBeNull();
+    expect(numericOrNullComponentMark('16.5')).toBe(16.5);
   });
 });

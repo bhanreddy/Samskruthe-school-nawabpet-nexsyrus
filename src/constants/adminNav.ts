@@ -26,6 +26,7 @@ export interface AdminNavAction {
 export function buildAdminNavActions(t: TFunction): AdminNavAction[] {
   return [
     { title: 'Website Gallery', icon: 'images-outline', route: '/admin/website-gallery', tier: 'OPS', gradient: ['#0F766E', '#2563EB'], category: 'Website', permission: 'admin.manage' },
+    { title: 'Daily Content', icon: 'newspaper-outline', route: '/admin/content', tier: 'OPS', gradient: ['#1E3A8A', '#3B82F6'], category: 'Comms', permission: 'content.view' },
     { title: 'Slide Manager', icon: 'albums-outline', route: '/admin/hero-slides', tier: 'OPS', gradient: ['#1E3A8A', '#2563EB'], category: 'Comms', permission: 'admin.manage' },
     { title: 'School Stories', icon: 'ellipse-outline', route: '/admin/school-stories', tier: 'OPS', gradient: ['#92400E', '#F59E0B'], category: 'Comms' },
     { title: t('admin_dashboard_v2.academic_structure', 'Academics'), icon: 'school-outline', route: '/admin/academics', tier: 'PRIMARY', gradient: ['#172554', '#2563EB'], category: 'Academic' },
@@ -37,6 +38,7 @@ export function buildAdminNavActions(t: TFunction): AdminNavAction[] {
     { title: 'Substitutions', icon: 'swap-horizontal-outline', route: '/admin/substitutions', tier: 'PRIMARY', gradient: ['#3730A3', '#06B6D4'], category: 'Academic', permission: 'academics.manage' },
     { title: 'Attendance Risk', icon: 'warning-outline', route: '/admin/attendance-risk', tier: 'PRIMARY', gradient: ['#991B1B', '#EA580C'], category: 'Academic', permission: 'attendance.manage' },
     { title: t('admin_dashboard_v2.exams', 'Exams'), icon: 'clipboard-outline', route: '/admin/exams', tier: 'PRIMARY', gradient: ['#3730A3', '#0EA5E9'], category: 'Academic' },
+    { title: 'OMR Evaluation', icon: 'scan-outline', route: '/admin/omr', tier: 'PRIMARY', gradient: ['#4F46E5', '#06B6D4'], category: 'Academic', permission: 'omr.view' },
     { title: 'Year Upgrade', icon: 'refresh-circle-outline', route: '/admin/academic-year-upgrade', tier: 'PRIMARY', gradient: ['#1E3A8A', '#7C3AED'], category: 'Academic' },
     { title: t('admin_dashboard_v2.certificates', 'Certs'), icon: 'ribbon-outline', route: '/admin/certificate-generator', tier: 'PRIMARY', gradient: ['#1E40AF', '#06B6D4'], category: 'Academic' },
     { title: t('admin_dashboard_v2.progress_reports', 'Progress'), icon: 'stats-chart-outline', route: '/admin/progress-report-generator', tier: 'PRIMARY', gradient: ['#4338CA', '#A855F7'], category: 'Academic' },
@@ -55,6 +57,7 @@ export function buildAdminNavActions(t: TFunction): AdminNavAction[] {
     { title: 'Payroll', icon: 'card-outline', route: '/admin/payroll', tier: 'FINANCE', gradient: ['#312E81', '#6366F1'], category: 'Finance' },
     { title: t('admin_dashboard_v2.view_reports', 'Reports'), icon: 'bar-chart-outline', route: '/admin/reports', tier: 'ACADEMIC', gradient: ['#581C87', '#7C3AED'], category: 'Analytics' },
     { title: 'Exam Analytics', icon: 'analytics-outline', route: '/admin/exam-analytics', tier: 'ACADEMIC', gradient: ['#3730A3', '#2563EB'], category: 'Analytics', permission: 'admin.manage' },
+    { title: 'School Intelligence', icon: 'sparkles-outline', route: '/admin/school-intelligence', tier: 'PRIMARY', gradient: ['#4338CA', '#6366F1'], category: 'Analytics', permission: 'admin.manage' },
     { title: t('admin_dashboard_v2.smart_insights', 'Insights'), icon: 'bulb-outline', route: '/admin/smart-insights', tier: 'ACADEMIC', gradient: ['#4C1D95', '#2563EB'], category: 'AI' },
     { title: t('admin_dashboard_v2.notices', 'Notices'), icon: 'megaphone-outline', route: '/admin/notices', tier: 'OPS', gradient: ['#7C2D12', '#F97316'], category: 'Comms' },
     { title: 'Popup Manager', icon: 'albums-outline', route: '/admin/popup-manager', tier: 'OPS', gradient: ['#6D28D9', '#8B5CF6'], category: 'Comms', permission: 'popups.create' },

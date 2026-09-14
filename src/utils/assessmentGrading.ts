@@ -235,8 +235,16 @@ export function isAbsentAssessmentInput(value: string | null | undefined): boole
   return typeof value === 'string' && ABSENT_MARKS.has(value.trim().toUpperCase());
 }
 
+/** Whole-exam absence: every component is marked A/AB. A single missed slip test is not this. */
 export function isComponentAssessmentAbsent(input: ComponentAssessmentInput): boolean {
-  return COMPONENT_FIELDS.some((field) => isAbsentAssessmentInput(input[field]));
+  return COMPONENT_FIELDS.every((field) => isAbsentAssessmentInput(input[field]));
+}
+
+/** Persist A/AB as null so other components can still store marks. */
+export function numericOrNullComponentMark(value: string): number | null {
+  if (value === '' || isAbsentAssessmentInput(value)) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 export function updateComponentAssessmentInput(

@@ -42,6 +42,8 @@ const NOTIFICATION_ROUTES: Record<string, string> = {
   ATTENDANCE_RISK_WARNING: '/admin/attendance-risk',
   ATTENDANCE_RISK_CRITICAL: '/admin/attendance-risk',
   SUBSTITUTION_ASSIGNED: '/admin/substitutions',
+  DAILY_THOUGHT: '/Screen/schoolDaily',
+  DAILY_NEWS: '/Screen/schoolDaily',
   // Batch 2: Transport Safety & Safeguarding
   TRANSPORT_OVERSPEED_ALERT: '/admin/live-bus-tracking',
   TRANSPORT_SOS_ALERT: '/admin/live-bus-tracking',

@@ -1,5 +1,23 @@
 {
   "500000": "₹5,00,000",
+  "school_daily": {
+    "title": "SchoolIMS Daily",
+    "good_morning": "Good morning",
+    "todays_thought": "Today's Thought",
+    "todays_news": "Today's News",
+    "saved_stories": "Saved Stories",
+    "open_edition": "Open edition",
+    "no_thought": "No thought published today.",
+    "no_news": "No news published today.",
+    "no_saved": "No saved articles yet.",
+    "offline_edition": "Offline edition",
+    "todays_edition": "Today's Edition",
+    "todays_stories": "Today's Stories",
+    "todays_kicker": "Today's thought • Today's news",
+    "empty_thought_help": "Today's reflection will appear here when your school publishes it.",
+    "empty_news_help": "Check back soon or explore other topics from the top bar.",
+    "empty_edition": "Today's edition is being prepared."
+  },
   "header": {
     "english": "English",
     "telugu": "Telugu"

@@ -99,6 +99,14 @@ export const ACCOUNTS_SIDEBAR_NAV: AccountsSidebarNavItem[] = [
     category: 'Academic',
   },
   {
+    title: 'OMR Answer Keys',
+    icon: 'key-outline',
+    route: '/accounts/omr-answer-key',
+    gradient: ['#4F46E5', '#06B6D4'],
+    category: 'Academic',
+    permission: 'omr.create_answer_key',
+  },
+  {
     title: 'Certificates',
     icon: 'ribbon-outline',
     route: '/accounts/certificate-generator',

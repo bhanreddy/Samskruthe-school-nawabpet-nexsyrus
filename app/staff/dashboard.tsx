@@ -4,7 +4,7 @@ import {
   StatusBar, BackHandler, TouchableOpacity, Pressable, ScrollView,
   useWindowDimensions, RefreshControl,
 } from 'react-native';
-import { useFocusEffect, useNavigation } from 'expo-router';
+import { useFocusEffect, useNavigation, useRouter } from 'expo-router';
 import { Ionicons, MaterialIcons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop, Path, Ellipse } from 'react-native-svg';
@@ -12,7 +12,7 @@ import Animated, {
   FadeInDown, FadeInUp, FadeIn, ZoomIn,
   useAnimatedStyle, useSharedValue, useAnimatedProps,
   withSpring, withTiming, withSequence, withRepeat, withDelay,
-  useAnimatedScrollHandler, interpolate, Extrapolate,
+  interpolate, Extrapolate,
   runOnJS,
 } from 'react-native-reanimated';
 import { useAuth } from '@/src/hooks/useAuth';
@@ -21,11 +21,9 @@ import { LeaveService } from '@/src/services/commonServices';
 import { useTheme } from '@/src/hooks/useTheme';
 import * as Haptics from '@/src/utils/haptics';
 import StaffHeader from '@/src/components/StaffHeader';
-import AdminHeaderCard from '@/src/components/AdminHeaderCard';
-import DashboardHero from '@/src/components/DashboardHero';
-import HeroSlidesCarousel from '@/src/components/hero-slides/HeroSlidesCarousel';
-import SchoolStoriesStrip from '@/src/components/school-stories/SchoolStoriesStrip';
+import StaffHero from '@/src/components/staff-hero/StaffHero';
 import ViewAsBanner from '@/src/components/ViewAsBanner';
+import { SCHOOL_CONFIG } from '@/src/constants/schoolConfig';
 import { useEffectiveStaffId } from '@/src/hooks/useEffectiveStaffId';
 import { usePersistedSWR } from '@/src/hooks/usePersistedSWR';
 import { useStaffPortalConfig } from '@/src/hooks/useStaffPortalConfig';
@@ -33,8 +31,11 @@ import { Staff, StaffService } from '@/src/services/staffService';
 import { schoolHeroSlidesService, type HeroSlideItem } from '@/src/services/schoolHeroSlidesService';
 import { schoolStoriesService, type SchoolStoryAuthor } from '@/src/services/schoolStoriesService';
 import StaffAttendanceQuickCard from '@/src/components/StaffAttendanceQuickCard';
+import AcademicTodayCard from '@/src/components/AcademicTodayCard';
 import { UpcomingEventsWidget } from '@/src/components/calendar/UpcomingEventsWidget';
+import { clayCard } from '@/src/theme/clayStyles';
 import { clayTokens } from '@/src/styles/clayTokens';
+import { DailySparkWidget } from '@/src/components/content/DailySparkWidget';
 import { usePopupUnreadCount } from '@/src/features/popups/popupUnreadStore';
 
 const { width: SW, height: SH } = Dimensions.get('window');
@@ -101,22 +102,6 @@ interface DashboardMetrics {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const getGreeting = () => {
-  const h = new Date().getHours();
-  if (h < 5) return 'Late Night';
-  if (h < 12) return 'Good Morning';
-  if (h < 17) return 'Good Afternoon';
-  return 'Good Evening';
-};
-const getTodayDate = () =>
-  new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric' });
-const getGreetingEmoji = () => {
-  const h = new Date().getHours();
-  if (h < 12) return '🌤';
-  if (h < 17) return '☀️';
-  return '🌙';
-};
-
 // ─── Background Orbs ─────────────────────────────────────────────────────────
 const BgOrbs = React.memo(function BgOrbs({ isDark }: { isDark: boolean }) {
   const t = isDark ? D.dark : D.light;
@@ -425,18 +410,16 @@ const AttendanceHero = React.memo(function AttendanceHero({ data, onPress, isDar
   const sessionLabel = data?.session === 'afternoon' ? 'Afternoon' : 'Morning';
   const classLabel = [data?.className, data?.sectionName].filter(Boolean).join(' · ');
   let statusText = total === 0
-    ? `No ${sessionLabel.toLowerCase()} class assigned`
+    ? `No ${sessionLabel.toLowerCase()} class on the timetable yet`
     : unmarked === 0
-      ? `${sessionLabel} fully marked`
-      : `${sessionLabel} · ${unmarked} student${unmarked !== 1 ? 's' : ''} left to mark`;
-  let statusColor = total === 0 ? 'rgba(255,255,255,0.6)' : unmarked === 0 ? '#38B289' : '#E8520A';
+      ? `${sessionLabel} is fully marked — well done`
+      : `${sessionLabel} · ${unmarked} student${unmarked !== 1 ? 's' : ''} still waiting`;
+  let statusColor = total === 0 ? '#6B7590' : unmarked === 0 ? '#00C4A0' : '#E8520A';
 
-  const cardBg = isDark ? '#111827' : '#FFFFFF';
-  const textColor = isDark ? '#FFFFFF' : '#1E293B';
-  const subTextColor = isDark ? 'rgba(255,255,255,0.6)' : '#64748B';
-  const classChipBg = isDark ? 'rgba(99, 102, 241, 0.22)' : '#EEF0FF';
+  const textColor = isDark ? '#F0F2FF' : '#2A3142';
+  const subTextColor = isDark ? 'rgba(240,242,255,0.58)' : '#6B7590';
   const classChipText = isDark ? '#C7D2FE' : '#4338CA';
-  const classChipIcon = isDark ? '#A5B4FC' : '#4F46E5';
+  const classChipIcon = isDark ? '#A5B4FC' : ACCENT.violet;
 
   const handlePressIn = () => {
     pressScale.value = withTiming(0.98, { duration: 150 });
@@ -449,185 +432,122 @@ const AttendanceHero = React.memo(function AttendanceHero({ data, onPress, isDar
 
   return (
     <Animated.View
-      entering={FadeInDown.delay(100).duration(550).springify().damping(16)}
-      style={[
-        anim,
-        {
-          marginBottom: 16,
+      entering={FadeInDown.delay(180).duration(320)}
+      style={[anim, clayCard(isDark, 'md'), { marginBottom: 16 }]}
+    >
+      <Pressable
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        onPress={onPress}
+        onHoverIn={() => {
+          if (IS_WEB) hoverLift.value = withTiming(1, { duration: 180 });
+        }}
+        onHoverOut={() => {
+          if (IS_WEB) hoverLift.value = withTiming(0, { duration: 220 });
+        }}
+        style={{
           borderRadius: 24,
           overflow: 'hidden',
-          backgroundColor: cardBg,
-          borderWidth: 1,
-          borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(99,102,241,0.08)',
-          ...(Platform.OS === 'web' ? {
-            boxShadow: isDark
-              ? '0px 14px 34px rgba(0,0,0,0.42), inset 0px 1px 0px rgba(255,255,255,0.06)'
-              : '0px 14px 34px rgba(100,116,139,0.15), inset 0px 1px 0px rgba(255,255,255,0.9)'
-          } : {
-            shadowColor: isDark ? '#000' : '#8A9BAE',
-            shadowOffset: { width: 0, height: 8 },
-            shadowOpacity: isDark ? 0.42 : 0.18,
-            shadowRadius: 18,
-            elevation: 6,
-          }),
-        }
-      ]}
-    >
-      <View style={{ padding: isWideLayout ? 22 : 18 }}>
-        <Pressable
-          onPressIn={handlePressIn}
-          onPressOut={handlePressOut}
-          onPress={onPress}
-          onHoverIn={() => {
-            if (IS_WEB) hoverLift.value = withTiming(1, { duration: 180 });
-          }}
-          onHoverOut={() => {
-            if (IS_WEB) hoverLift.value = withTiming(0, { duration: 220 });
-          }}
-          style={[Platform.OS === 'web' && { cursor: 'pointer' }]}
-        >
-          {/* 1. Header Section */}
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <Text style={{ flex: 1, fontSize: 21, fontWeight: '800', color: textColor, letterSpacing: -0.5 }}>{"Today's Roll Call"}</Text>
+          padding: isWideLayout ? 22 : 18,
+          ...(IS_WEB ? { cursor: 'pointer' as const } : null),
+        }}
+      >
+        <LinearGradient
+          colors={isDark ? ['rgba(255,255,255,0.07)', 'rgba(255,255,255,0)'] : ['rgba(255,255,255,0.22)', 'rgba(255,255,255,0)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0.7, y: 1 }}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
 
-            {/* Pill student count badge */}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10 }}>
             <View style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              paddingHorizontal: 10,
-              paddingVertical: 7,
-              borderRadius: 16,
-              backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#F1F5F9',
-            }}>
-              <Ionicons name="people-outline" size={14} color={textColor} style={{ marginRight: 5 }} />
-              <Text style={{ fontSize: 12, fontWeight: '700', color: textColor }}>{total} student{total !== 1 ? 's' : ''}</Text>
-            </View>
-          </View>
-
-          {/* Class and live session status */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 13, minHeight: 28 }}>
-            {!!classLabel && (
-              <View style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                maxWidth: '36%',
-                paddingHorizontal: 8,
-                paddingVertical: 5,
-                borderRadius: 12,
-                backgroundColor: classChipBg,
-                borderWidth: 1,
-                borderColor: isDark ? 'rgba(165,180,252,0.16)' : 'rgba(99,102,241,0.10)',
-              }}>
-                <Ionicons name="school-outline" size={13} color={classChipIcon} style={{ marginRight: 5 }} />
-                <Text style={{ fontSize: 12, fontWeight: '700', color: classChipText, flexShrink: 1 }} numberOfLines={1}>
-                  {classLabel}
-                </Text>
-              </View>
-            )}
-            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', marginLeft: classLabel ? 9 : 0 }}>
-              <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: statusColor, marginRight: 6 }} />
-              <Text style={{ fontSize: 12, fontWeight: '600', color: subTextColor, flex: 1 }} numberOfLines={1}>{statusText}</Text>
-            </View>
-          </View>
-
-          {/* Compact progress and status summary */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15 }}>
-            <View style={{
-              width: 132,
-              height: 132,
-              borderRadius: 28,
+              width: 40,
+              height: 40,
+              borderRadius: 14,
+              backgroundColor: isDark ? 'rgba(108,99,255,0.20)' : clayTokens.colors.brand.violetSoft,
               alignItems: 'center',
               justifyContent: 'center',
-              backgroundColor: isDark ? 'rgba(255,255,255,0.025)' : '#FAFBFD',
-              borderWidth: 1,
-              borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(100,116,139,0.07)',
             }}>
-              <ClayGraphic type="clock" size={22} isDark={isDark} style={{ top: 9, left: 9 }} />
-              <AttendanceArc pct={pct} isDark={isDark} size={126} stroke={10} />
+              <Ionicons name="people" size={18} color={ACCENT.violet} />
             </View>
-            <View style={{ flex: 1, marginLeft: 12, gap: 7 }}>
-              <StatCard value={present} label="Present" type="present" isDark={isDark} />
-              <StatCard value={absent} label="Absent" type="absent" isDark={isDark} />
-              <StatCard value={unmarked} label="Not marked" type="pending" isDark={isDark} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: textColor, letterSpacing: -0.3 }}>{"Today's class"}</Text>
+              <Text style={{ fontSize: 12, fontWeight: '500', color: subTextColor, marginTop: 1 }} numberOfLines={1}>
+                {classLabel || 'Your classroom'}
+              </Text>
             </View>
           </View>
 
-          {/* Slim primary action */}
-          <LinearGradient
-            colors={['#777AF8', '#5558E8']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={{
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: 10,
+            paddingVertical: 7,
+            borderRadius: 999,
+            backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : clayTokens.colors.brand.violetSoft,
+          }}>
+            <Ionicons name="people-outline" size={14} color={classChipIcon} style={{ marginRight: 5 }} />
+            <Text style={{ fontSize: 12, fontWeight: '700', color: classChipText }}>{total} student{total !== 1 ? 's' : ''}</Text>
+          </View>
+        </View>
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14, minHeight: 24 }}>
+          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: statusColor, marginRight: 8 }} />
+          <Text style={{ fontSize: 13, fontWeight: '600', color: subTextColor, flex: 1 }} numberOfLines={1}>{statusText}</Text>
+        </View>
+
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15 }}>
+          <View style={{
+            width: 132,
+            height: 132,
+            borderRadius: 28,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: isDark ? 'rgba(255,255,255,0.025)' : '#FAFBFD',
+            borderWidth: 1,
+            borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(100,116,139,0.07)',
+          }}>
+            <ClayGraphic type="clock" size={22} isDark={isDark} style={{ top: 9, left: 9 }} />
+            <AttendanceArc pct={pct} isDark={isDark} size={126} stroke={10} />
+          </View>
+          <View style={{ flex: 1, marginLeft: 12, gap: 7 }}>
+            <StatCard value={present} label="Present" type="present" isDark={isDark} />
+            <StatCard value={absent} label="Absent" type="absent" isDark={isDark} />
+            <StatCard value={unmarked} label="Not marked" type="pending" isDark={isDark} />
+          </View>
+        </View>
+
+        <LinearGradient
+          colors={[ACCENT.violetMid, ACCENT.violet]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={{
             borderRadius: 15,
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'center',
             paddingVertical: 13,
             ...(Platform.OS === 'web' ? {
-              boxShadow: '0px 8px 18px rgba(79,70,229,0.25), inset 0px 1px 0px rgba(255,255,255,0.30)'
+              boxShadow: '0px 8px 18px rgba(108,99,255,0.28), inset 0px 1px 0px rgba(255,255,255,0.30)'
             } : {
-              shadowColor: '#6366F1',
+              shadowColor: ACCENT.violet,
               shadowOffset: { width: 0, height: 5 },
               shadowOpacity: 0.28,
               shadowRadius: 10,
               elevation: 5,
-            })
-          }}>
-            <Text style={{ fontSize: 14, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.1 }}>Mark Attendance</Text>
-            <Ionicons name="arrow-forward" size={17} color="#FFFFFF" style={{ marginLeft: 7 }} />
-          </LinearGradient>
-        </Pressable>
-      </View>
-    </Animated.View>
-  );
-});
-
-// ─── Hero Banner ──────────────────────────────────────────────────────────────
-const HeroBanner = React.memo(function HeroBanner({ name, card, isDark }: { name: string; isDark: boolean; card ?: React.ReactNode }) {
-  return (
-    <View style={{ marginTop: 4, marginBottom: 20 }}>
-      <DashboardHero
-        eyebrow={`${getGreetingEmoji()}  ${getTodayDate()}`.toUpperCase()}
-        greeting={getGreeting()}
-        name={name}
-        stacks
-        useSchoolBranding
-        eyebrowIcon="school-outline"
-        card={card}
-      />
-    </View>
-  );
-});
-
-// ─── Leave Alert ──────────────────────────────────────────────────────────────
-const LeaveAlert = React.memo(function LeaveAlert({ count, onPress, isDark }: { count: number; onPress: () => void; isDark: boolean }) {
-  const t = isDark ? D.dark : D.light;
-  return (
-    <Animated.View entering={FadeInDown.delay(60).duration(420).springify()} style={{ marginBottom: 20 }}>
-      <TouchableOpacity onPress={onPress} activeOpacity={0.85}>
-        <LinearGradient
-          colors={isDark ? ['rgba(255,176,26,0.15)', 'rgba(255,176,26,0.07)'] : ['rgba(255,176,26,0.05)', 'rgba(255,176,26,0.02)']}
-          style={[styles.leaveAlert, { borderColor: 'rgba(255,176,26,0.25)' }]}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+            }),
+          }}
         >
-          <View style={styles.leaveAlertLeft}>
-            <View style={styles.leaveAlertDot} />
-            <View style={[styles.leaveAlertIconBox, { backgroundColor: 'rgba(255,176,26,0.15)' }]}>
-              <Ionicons name="time" size={15} color={ACCENT.amber} />
-            </View>
-            <View>
-              <Text style={styles.leaveAlertTitle}>{count} Leave {count === 1 ? 'Request' : 'Requests'} Awaiting</Text>
-              <Text style={[styles.leaveAlertSub, { color: isDark ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.42)' }]}>Tap to review & approve</Text>
-            </View>
-          </View>
-          <View style={styles.leaveCountBubble}>
-            <Text style={styles.leaveCountText}>{count}</Text>
-          </View>
+          <Text style={{ fontSize: 14, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.1 }}>Mark attendance</Text>
+          <Ionicons name="arrow-forward" size={17} color="#FFFFFF" style={{ marginLeft: 7 }} />
         </LinearGradient>
-      </TouchableOpacity>
+      </Pressable>
     </Animated.View>
   );
 });
+
 
 // ─── Section Label ────────────────────────────────────────────────────────────
 const SectionLabel = React.memo(function SectionLabel({ label, isDark }: { label: string; isDark: boolean }) {
@@ -635,7 +555,7 @@ const SectionLabel = React.memo(function SectionLabel({ label, isDark }: { label
   return (
     <View style={styles.sectionLabel}>
       <LinearGradient colors={[ACCENT.violet, ACCENT.emerald]} style={styles.sectionAccent} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} />
-      <Text style={[styles.sectionLabelText, { color: t.text3 }]}>{label}</Text>
+      <Text style={[styles.sectionLabelText, { color: t.text2 }]}>{label}</Text>
     </View>
   );
 });
@@ -644,163 +564,148 @@ const SectionLabel = React.memo(function SectionLabel({ label, isDark }: { label
 // ─── ENHANCED MENU CARD SYSTEM ────────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
 
+type TileName = keyof typeof clayTokens.colors.tiles;
+type CardPatternType = 'rings' | 'diagonal' | 'dots' | 'arc';
+
 interface MenuConfig {
   icon: React.ReactNode;
-  grad: readonly [string, string, string];
-  accentLight: string;       // Light highlight color for accents
-  accentBar: [string, string];
-  shadowColor: string;
   category: string;
-  shimmerColor: string;
-  patternType: 'rings' | 'diagonal' | 'dots' | 'arc';
+  tile: TileName;
 }
+
+const MENU_ICON = { color: '#FFFFFF', size: 26 } as const;
 
 const MENU_CONFIGS: Record<string, MenuConfig> = {
   notices: {
-    icon: <Ionicons name="megaphone" size={26} color="#fff" />,
-    grad: ['#818CF8', '#4F46E5', '#3730A3'] as const,
-    accentLight: '#A5B4FC',
-    accentBar: ['#A5B4FC', '#6366F1'],
-    shadowColor: '#4F46E5',
+    icon: <Ionicons name="megaphone" size={MENU_ICON.size} color={MENU_ICON.color} />,
     category: 'UPDATES',
-    shimmerColor: 'rgba(129,140,248,0.38)',
-    patternType: 'arc',
+    tile: 'indigo',
+  },
+  updates: {
+    icon: <Ionicons name="notifications" size={MENU_ICON.size} color={MENU_ICON.color} />,
+    category: 'ALERTS',
+    tile: 'bronze',
   },
   stories: {
-    icon: <Ionicons name="ellipse" size={26} color="#fff" />,
-    grad: ['#FBBF24', '#F59E0B', '#B45309'] as const,
-    accentLight: '#FDE68A',
-    accentBar: ['#FDE68A', '#F59E0B'],
-    shadowColor: '#B45309',
-    category: 'UPDATES',
-    shimmerColor: 'rgba(251,191,36,0.38)',
-    patternType: 'rings',
+    icon: <Ionicons name="ellipse" size={MENU_ICON.size} color={MENU_ICON.color} />,
+    category: 'STORIES',
+    tile: 'forest',
   },
   messages: {
-    icon: <Ionicons name="chatbubbles" size={26} color="#fff" />,
-    grad: ['#818CF8', '#6366F1', '#4338CA'] as const,
-    accentLight: '#C7D2FE',
-    accentBar: ['#C7D2FE', '#818CF8'],
-    shadowColor: '#4F46E5',
+    icon: <Ionicons name="chatbubbles" size={MENU_ICON.size} color={MENU_ICON.color} />,
     category: 'COMMS',
-    shimmerColor: 'rgba(129,140,248,0.36)',
-    patternType: 'dots',
+    tile: 'burgundy',
   },
   academic: {
-    icon: <Ionicons name="book" size={26} color="#fff" />,
-    grad: ['#818CF8', '#4F46E5', '#312E81'] as const,
-    accentLight: '#C7D2FE',
-    accentBar: ['#C7D2FE', '#6366F1'],
-    shadowColor: '#4F46E5',
+    icon: <Ionicons name="book" size={MENU_ICON.size} color={MENU_ICON.color} />,
     category: 'ACADEMICS',
-    shimmerColor: 'rgba(129,140,248,0.38)',
-    patternType: 'arc',
+    tile: 'sapphire',
   },
   diary: {
-    icon: <FontAwesome5 name="book" size={26} color="#fff" />,
-    grad: ['#2D7FFF', '#1254D4', '#0830A0'] as const,
-    accentLight: '#90C4FF',
-    accentBar: ['#70BAFF', '#2D7FFF'],
-    shadowColor: '#1254D4',
+    icon: <FontAwesome5 name="book" size={22} color={MENU_ICON.color} />,
     category: 'RECORDS',
-    shimmerColor: 'rgba(120,190,255,0.38)',
-    patternType: 'diagonal',
+    tile: 'copper',
+  },
+  anecdotes: {
+    icon: <Ionicons name="journal" size={MENU_ICON.size} color={MENU_ICON.color} />,
+    category: 'NOTES',
+    tile: 'plum',
+  },
+  intelligence: {
+    icon: <Ionicons name="analytics" size={MENU_ICON.size} color={MENU_ICON.color} />,
+    category: 'INSIGHTS',
+    tile: 'teal',
+  },
+  events: {
+    icon: <Ionicons name="qr-code" size={MENU_ICON.size} color={MENU_ICON.color} />,
+    category: 'EVENTS',
+    tile: 'slate',
+  },
+  admissions: {
+    icon: <Ionicons name="person-add" size={MENU_ICON.size} color={MENU_ICON.color} />,
+    category: 'ENROL',
+    tile: 'ochre',
   },
   timetable: {
-    icon: <Ionicons name="calendar" size={27} color="#fff" />,
-    grad: ['#00D4A8', '#00A882', '#006858'] as const,
-    accentLight: '#80FFE8',
-    accentBar: ['#80FFE8', '#00C4A0'],
-    shadowColor: '#00A882',
+    icon: <Ionicons name="calendar" size={MENU_ICON.size} color={MENU_ICON.color} />,
     category: 'SCHEDULE',
-    shimmerColor: 'rgba(100,255,220,0.35)',
-    patternType: 'dots',
+    tile: 'rosewood',
   },
   portfolio: {
-    icon: <Ionicons name="id-card" size={27} color="#fff" />,
-    grad: ['#2DD4BF', '#0D9488', '#0F766E'] as const,
-    accentLight: '#99F6E4',
-    accentBar: ['#99F6E4', '#2DD4BF'],
-    shadowColor: '#0D9488',
+    icon: <Ionicons name="id-card" size={MENU_ICON.size} color={MENU_ICON.color} />,
     category: 'STUDENTS',
-    shimmerColor: 'rgba(94,234,212,0.36)',
-    patternType: 'arc',
+    tile: 'navy',
   },
   rollNumbers: {
-    icon: <Ionicons name="list-circle" size={28} color="#fff" />,
-    grad: ['#38BDF8', '#0284C7', '#075985'] as const,
-    accentLight: '#BAE6FD',
-    accentBar: ['#BAE6FD', '#38BDF8'],
-    shadowColor: '#0284C7',
-    category: 'STUDENTS',
-    shimmerColor: 'rgba(125,211,252,0.36)',
-    patternType: 'rings',
+    icon: <Ionicons name="list-circle" size={MENU_ICON.size} color={MENU_ICON.color} />,
+    category: 'ROSTER',
+    tile: 'indigo',
   },
   attendance: {
-    icon: <FontAwesome5 name="fingerprint" size={27} color="#fff" />,
-    grad: ['#FF8040', '#E8520A', '#B83600'] as const,
-    accentLight: '#FFCC90',
-    accentBar: ['#FFCC90', '#FF7428'],
-    shadowColor: '#E8520A',
+    icon: <FontAwesome5 name="fingerprint" size={22} color={MENU_ICON.color} />,
     category: 'TRACKING',
-    shimmerColor: 'rgba(255,200,100,0.32)',
-    patternType: 'rings',
+    tile: 'bronze',
   },
   leaves: {
-    icon: <FontAwesome5 name="calendar-check" size={24} color="#fff" />,
-    grad: ['#FF3D5C', '#D41040', '#9E0030'] as const,
-    accentLight: '#FFAABC',
-    accentBar: ['#FFAABC', '#FF2D52'],
-    shadowColor: '#D41040',
+    icon: <FontAwesome5 name="calendar-check" size={20} color={MENU_ICON.color} />,
     category: 'APPROVALS',
-    shimmerColor: 'rgba(255,140,160,0.34)',
-    patternType: 'arc',
+    tile: 'copper',
   },
   results: {
-    icon: <MaterialIcons name="assessment" size={30} color="#fff" />,
-    grad: ['#FFAA00', '#E08000', '#A85800'] as const,
-    accentLight: '#FFE090',
-    accentBar: ['#FFE090', '#FFB31A'],
-    shadowColor: '#E08000',
-    category: 'ACADEMIC',
-    shimmerColor: 'rgba(255,225,120,0.38)',
-    patternType: 'diagonal',
+    icon: <MaterialIcons name="assessment" size={26} color={MENU_ICON.color} />,
+    category: 'MARKS',
+    tile: 'forest',
+  },
+  omrScanner: {
+    icon: <Ionicons name="scan" size={MENU_ICON.size} color={MENU_ICON.color} />,
+    category: 'GRADING',
+    tile: 'teal',
+  },
+  omrReview: {
+    icon: <Ionicons name="eye" size={MENU_ICON.size} color={MENU_ICON.color} />,
+    category: 'REVIEW',
+    tile: 'plum',
+  },
+  omrKeys: {
+    icon: <Ionicons name="key" size={MENU_ICON.size} color={MENU_ICON.color} />,
+    category: 'KEYS',
+    tile: 'navy',
+  },
+  progressCards: {
+    icon: <Ionicons name="document-text" size={MENU_ICON.size} color={MENU_ICON.color} />,
+    category: 'REPORTS',
+    tile: 'ochre',
   },
   complaints: {
-    icon: <Ionicons name="chatbubble-ellipses" size={26} color="#fff" />,
-    grad: ['#8070FF', '#5548E0', '#3530B0'] as const,
-    accentLight: '#C8C0FF',
-    accentBar: ['#C8C0FF', '#7268FF'],
-    shadowColor: '#5548E0',
+    icon: <Ionicons name="chatbubble-ellipses" size={MENU_ICON.size} color={MENU_ICON.color} />,
     category: 'SUPPORT',
-    shimmerColor: 'rgba(180,160,255,0.34)',
-    patternType: 'rings',
+    tile: 'slate',
+  },
+  fineRequest: {
+    icon: <MaterialCommunityIcons name="cash-plus" size={MENU_ICON.size} color={MENU_ICON.color} />,
+    category: 'FINANCE',
+    tile: 'rosewood',
   },
   lms: {
-    icon: <MaterialIcons name="cloud-upload" size={28} color="#fff" />,
-    grad: ['#FF4EC0', '#D01898', '#920070'] as const,
-    accentLight: '#FFB8E8',
-    accentBar: ['#FFB8E8', '#FF4DB4'],
-    shadowColor: '#D01898',
+    icon: <MaterialIcons name="cloud-upload" size={26} color={MENU_ICON.color} />,
     category: 'CONTENT',
-    shimmerColor: 'rgba(255,155,220,0.34)',
-    patternType: 'dots',
+    tile: 'sapphire',
+  },
+  daily: {
+    icon: <Ionicons name="sunny" size={MENU_ICON.size} color={MENU_ICON.color} />,
+    category: 'DAILY',
+    tile: 'ochre',
   },
   payslips: {
-    icon: <FontAwesome5 name="file-invoice-dollar" size={24} color="#fff" />,
-    grad: ['#20CEC8', '#0AABA4', '#027A74'] as const,
-    accentLight: '#A0F0EC',
-    accentBar: ['#A0F0EC', '#2EBFB8'],
-    shadowColor: '#0AABA4',
-    category: 'FINANCE',
-    shimmerColor: 'rgba(100,240,235,0.32)',
-    patternType: 'arc',
+    icon: <FontAwesome5 name="file-invoice-dollar" size={20} color={MENU_ICON.color} />,
+    category: 'PAY',
+    tile: 'bronze',
   },
 };
 
 // ─── Card Pattern Decoration ──────────────────────────────────────────────────
 // Each pattern type adds a unique geometric decoration to the gradient zone
-const CardPattern = React.memo(function CardPattern({ type, accentLight }: { type: MenuConfig['patternType']; accentLight: string }) {
+const CardPattern = React.memo(function CardPattern({ type, accentLight }: { type: CardPatternType; accentLight: string }) {
   if (type === 'rings') {
     // Concentric quarter-arc rings in the bottom-right corner
     return (
@@ -928,53 +833,12 @@ const LiveBadge = React.memo(function LiveBadge({ count }: { count: string }) {
 
 // ─── Enhanced Menu Card ───────────────────────────────────────────────────────
 function getStaffClayColors(configKey: string, isDark: boolean) {
-  let bg = '#3D5AFE'; // Default: Vibrant Indigo
-  let shadowColor = '#1A237E';
-
-  if (configKey === 'notices') {
-    bg = isDark ? '#2E3FA7' : '#3D5AFE'; // Vibrant Indigo
-    shadowColor = isDark ? '#1C2570' : '#1A237E';
-  } else if (configKey === 'stories') {
-    bg = isDark ? '#B45309' : '#F59E0B';
-    shadowColor = isDark ? '#78350F' : '#B45309';
-  } else if (configKey === 'messages') {
-    bg = isDark ? '#0070A3' : '#00B0FF'; // Electric Cyan
-    shadowColor = isDark ? '#003E5C' : '#01579B';
-  } else if (configKey === 'academic') {
-    bg = isDark ? '#3730A3' : '#4F46E5';
-    shadowColor = isDark ? '#1E1B4B' : '#312E81';
-  } else if (configKey === 'diary') {
-    bg = isDark ? '#5033B3' : '#7C4DFF'; // Vivid Violet
-    shadowColor = isDark ? '#2F187A' : '#4A148C';
-  } else if (configKey === 'timetable') {
-    bg = isDark ? '#00A352' : '#00C853'; // Vibrant Green
-    shadowColor = isDark ? '#005E2E' : '#1B5E20';
-  } else if (configKey === 'portfolio') {
-    bg = isDark ? '#0F766E' : '#14B8A6';
-    shadowColor = isDark ? '#064E3B' : '#0F766E';
-  } else if (configKey === 'rollNumbers') {
-    bg = isDark ? '#0369A1' : '#0EA5E9';
-    shadowColor = isDark ? '#0C4A6E' : '#0369A1';
-  } else if (configKey === 'attendance') {
-    bg = isDark ? '#C44E00' : '#FF6D00'; // Vivid Orange
-    shadowColor = isDark ? '#802F00' : '#E65100';
-  } else if (configKey === 'leaves') {
-    bg = isDark ? '#B30B2C' : '#FF1744'; // Vivid Scarlet
-    shadowColor = isDark ? '#6E0013' : '#9E001F';
-  } else if (configKey === 'results') {
-    bg = isDark ? '#C48400' : '#FFAB00'; // Vibrant Gold
-    shadowColor = isDark ? '#7A4D00' : '#FF6F00';
-  } else if (configKey === 'complaints') {
-    bg = isDark ? '#AB1054' : '#FF2A85'; // Hot Magenta
-    shadowColor = isDark ? '#6E0031' : '#880E4F';
-  } else if (configKey === 'lms') {
-    bg = isDark ? '#008573' : '#00BFA5'; // Vivid Teal
-    shadowColor = isDark ? '#004F43' : '#004D40';
-  } else if (configKey === 'payslips') {
-    bg = isDark ? '#2E3C42' : '#546E7A'; // Blue Slate
-    shadowColor = isDark ? '#1C2529' : '#263238';
-  }
-  return { bg, shadowColor };
+  const tileName = MENU_CONFIGS[configKey]?.tile ?? 'indigo';
+  const tile = clayTokens.colors.tiles[tileName];
+  return {
+    bg: isDark ? tile.dark : tile.bg,
+    shadowColor: tile.shadow,
+  };
 }
 
 const MenuCard = React.memo(function MenuCard({
@@ -994,8 +858,7 @@ const MenuCard = React.memo(function MenuCard({
   index: number;
   isDark: boolean;
 }) {
-  const cfg = MENU_CONFIGS[configKey];
-  const t = isDark ? D.dark : D.light;
+  const cfg = MENU_CONFIGS[configKey] ?? MENU_CONFIGS.notices;
   const borderRadius = IS_WEB ? 28 : 24;
 
   const pressScale = useSharedValue(1);
@@ -1041,25 +904,22 @@ const MenuCard = React.memo(function MenuCard({
   }, [configKey, isDark, borderRadius]);
 
   const handlePressIn = () => {
-    pressScale.value = withTiming(0.97, { duration: 150 });
-    translateY.value = withTiming(1.5, { duration: 150 });
+    pressScale.value = withTiming(0.97, { duration: 90 });
+    translateY.value = withTiming(1.5, { duration: 90 });
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
 
   const handlePressOut = () => {
-    pressScale.value = withTiming(1, { duration: 150 });
-    translateY.value = withTiming(0, { duration: 150 });
+    pressScale.value = withTiming(1, { duration: 110 });
+    translateY.value = withTiming(0, { duration: 110 });
   };
 
   return (
     <Animated.View
       entering={
         FadeInUp
-          .delay(180 + index * 65)
-          .duration(560)
-          .springify()
-          .damping(15)
-          .stiffness(90)
+          .delay(160 + Math.min(index, 9) * 40)
+          .duration(320)
       }
       style={[
         wrapperStyle,
@@ -1162,13 +1022,7 @@ const MenuCard = React.memo(function MenuCard({
             justifyContent: 'center',
             ...(Platform.OS === 'web' ? {
               boxShadow: '1px 2px 4px rgba(0,0,0,0.12), inset 1px 1px 2px rgba(255,255,255,0.35)'
-            } : {
-              shadowColor: '#000000',
-              shadowOffset: { width: 0, height: 1.5 },
-              shadowOpacity: 0.1,
-              shadowRadius: 2,
-              elevation: 1.5
-            })
+            } : {})
           }}>
             <View style={{ transform: [{ scale: IS_WEB ? 0.78 : 0.68 }] }}>
               {cfg.icon}
@@ -1262,13 +1116,7 @@ const MenuCard = React.memo(function MenuCard({
           zIndex: 2,
           ...(Platform.OS === 'web' ? {
             boxShadow: '1px 2px 4px rgba(0,0,0,0.12), inset 1px 1px 2px rgba(255,255,255,0.35)'
-          } : {
-            shadowColor: '#000000',
-            shadowOffset: { width: 0, height: 1.5 },
-            shadowOpacity: 0.1,
-            shadowRadius: 2,
-            elevation: 1.5
-          }),
+          } : {}),
         }}>
           <Ionicons name="chevron-forward" size={IS_WEB ? 13 : 10} color="#FFFFFF" />
         </View>
@@ -1282,6 +1130,7 @@ export default function StaffDashboard() {
   // The staff area is a single MaterialTopTabs (pager) navigator; this returns
   // that navigator so we can switch tabs the same way StaffFooter does.
   const navigation = useNavigation();
+  const router = useRouter();
   const { user } = useAuth();
   const { isDark } = useTheme();
   const t = isDark ? D.dark : D.light;
@@ -1370,22 +1219,28 @@ export default function StaffDashboard() {
 
   const menuItems = useMemo(() => [
     { title: 'Notices', subtitle: 'School updates', configKey: 'notices', route: '/staff/notices' },
-    { title: 'Updates', subtitle: 'Important popups', configKey: 'notices', route: '/staff/updates', badge: popupUnread ? `${popupUnread}` : undefined },
+    { title: 'SchoolIMS Daily', subtitle: "Today's thought & news", configKey: 'daily', route: '/Screen/schoolDaily' },
+    { title: 'Updates', subtitle: 'Important popups', configKey: 'updates', route: '/staff/updates', badge: popupUnread ? `${popupUnread}` : undefined },
     { title: 'School Stories', subtitle: 'Post 24-hour rings', configKey: 'stories', route: '/staff/school-stories' },
     { title: 'Messages', subtitle: 'In-app chat', configKey: 'messages', route: '/staff/messages' },
     { title: 'Academic Today', subtitle: "Today's topic in 1 tap", configKey: 'academic', route: '/staff/academic-today' },
     { title: 'Diary', subtitle: 'Photo, voice & homework', configKey: 'diary', route: '/staff/diary' },
-    { title: 'Event Ops', subtitle: 'QR, tasks, attendance', configKey: 'academic', route: '/staff/events' },
-    { title: 'Admissions', subtitle: 'Enquiry pipeline', configKey: 'academic', route: '/staff/admissions' },
+    { title: 'Anecdotes', subtitle: 'Observation & Intel', configKey: 'anecdotes', route: '/staff/anecdotes' },
+    { title: 'Intelligence', subtitle: 'Student Cockpit', configKey: 'intelligence', route: '/staff/student-intelligence' },
+    { title: 'Event Ops', subtitle: 'QR, tasks, attendance', configKey: 'events', route: '/staff/events' },
+    { title: 'Admissions', subtitle: 'Enquiry pipeline', configKey: 'admissions', route: '/staff/admissions' },
     { title: 'Timetable', subtitle: 'Class schedule', configKey: 'timetable', route: '/staff/timetable' },
     { title: 'Student Portfolio', subtitle: 'First-class profiles', configKey: 'portfolio', route: '/staff/student-portfolio' },
     { title: 'Roll Numbers', subtitle: 'Set your class order', configKey: 'rollNumbers', route: '/staff/roll-numbers' },
     { title: 'My Attendance', subtitle: 'History & reports', configKey: 'attendance', route: '/staff/attendance' },
     { title: 'Leaves', subtitle: 'Review approvals', configKey: 'leaves', route: '/staff/leaves', badge: data?.pendingLeaves ? `${data.pendingLeaves}` : undefined },
     { title: 'Results', subtitle: 'Enter & view marks', configKey: 'results', route: '/staff/results' },
-    { title: 'Progress Cards', subtitle: 'Class-teacher card assistant', configKey: 'results', route: '/staff/progress-card-assistant' },
+    { title: 'OMR Scanner', subtitle: 'Camera bubble grading', configKey: 'omrScanner', route: '/staff/omr-scanner' },
+    { title: 'OMR Review', subtitle: 'Verify flagged sheets', configKey: 'omrReview', route: '/staff/omr-review' },
+    { title: 'OMR Answer Keys', subtitle: 'Map and publish keys', configKey: 'omrKeys', route: '/staff/omr-answer-key' },
+    { title: 'Progress Cards', subtitle: 'Class-teacher card assistant', configKey: 'progressCards', route: '/staff/progress-card-assistant' },
     { title: 'Complaints', subtitle: 'Student issues', configKey: 'complaints', route: '/staff/complaints' },
-    { title: 'Fine Request', subtitle: 'Damage & penalties', configKey: 'complaints', route: '/staff/fine-request' },
+    { title: 'Fine Request', subtitle: 'Damage & penalties', configKey: 'fineRequest', route: '/staff/fine-request' },
     { title: 'LMS', subtitle: 'Upload resources', configKey: 'lms', route: '/staff/lms-upload' },
     ...(payslipsEnabled ? [{ title: 'Payslips', subtitle: 'Salary & docs', configKey: 'payslips', route: '/staff/payslip' }] : []),
   ], [data?.pendingLeaves, payslipsEnabled, popupUnread]);
@@ -1406,13 +1261,18 @@ export default function StaffDashboard() {
     (navigation as any).navigate(screen, params);
   }, [isViewingAsAdmin, navigation, staffId, viewAsName, viewAsUserId, actorUserId]);
 
-  const scrollY = useSharedValue(0);
-  const onScroll = useAnimatedScrollHandler({
-    onScroll: (e: any) => { scrollY.value = e.contentOffset.y; },
-  });
+  const headerScrollY = useSharedValue(60);
 
   const handleLeavesPress = useCallback(() => {
     navigateToStaffRoute('/staff/leaves');
+  }, [navigateToStaffRoute]);
+
+  const handleUpdatesPress = useCallback(() => {
+    navigateToStaffRoute('/staff/updates');
+  }, [navigateToStaffRoute]);
+
+  const handleNotificationsPress = useCallback(() => {
+    navigateToStaffRoute('/staff/notices');
   }, [navigateToStaffRoute]);
 
   const handleManageStudentsPress = useCallback(() => {
@@ -1425,23 +1285,13 @@ export default function StaffDashboard() {
   }, [refetch, refetchSlides, refetchStories]);
 
   const firstName = (isViewingAsAdmin ? viewAsName : user?.displayName)?.split(' ')[0] || 'Teacher';
-
-  const headerProfileCard = (
-    <AdminHeaderCard
-      compact
-      compactRole
-      embedded
-      displayName={(isViewingAsAdmin ? (viewedStaff?.display_name || viewAsName) : user?.displayName) || 'Staff Member'}
-      photoUrl={isViewingAsAdmin ? viewedStaff?.photo_url : user?.photoUrl}
-      roleLabel={
-        isViewingAsAdmin
-          ? (viewedStaff?.designation_name || viewedStaff?.designation || 'Staff')
-          : (user?.role?.name || 'Staff')
-      }
-      staffCode={isViewingAsAdmin ? viewedStaff?.staff_code : user?.staff_code}
-      portalBadge="STAFF"
-    />
-  );
+  const roleLine = (() => {
+    const classLabel = [data?.className, data?.sectionName].filter(Boolean).join(' ');
+    if (classLabel) return `Class ${classLabel}`;
+    if (isViewingAsAdmin) return viewedStaff?.designation_name || viewedStaff?.designation || 'Staff';
+    return user?.role?.name || 'Staff';
+  })();
+  const photoUrl = isViewingAsAdmin ? viewedStaff?.photo_url : user?.photoUrl;
 
   return (
     <View style={[styles.root, { backgroundColor: t.bg }]}>
@@ -1450,10 +1300,9 @@ export default function StaffDashboard() {
       <StaffHeader
         title="Staff Portal"
         subtitle={(isViewingAsAdmin ? viewAsName : user?.displayName) || 'Teacher'}
-        scrollY={scrollY}
+        scrollY={headerScrollY}
       />
       <Animated.ScrollView
-        onScroll={onScroll}
         scrollEventThrottle={16}
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
@@ -1467,63 +1316,66 @@ export default function StaffDashboard() {
           />
         )}
       >
-        {isViewingAsAdmin && <ViewAsBanner name={viewAsName} />}
-        <HeroBanner name={firstName} isDark={isDark} card={headerProfileCard} />
-        <HeroSlidesCarousel
-          slides={heroSlides ?? []}
-          dotTone={isDark ? 'onDark' : 'onLight'}
-          style={{ marginBottom: 16 }}
-        />
-        <SchoolStoriesStrip
-          stories={schoolStories ?? []}
-          canAdd={!isViewingAsAdmin}
-          addPhotoUrl={isViewingAsAdmin ? viewedStaff?.photo_url : user?.photoUrl}
-          tone={isDark ? 'onDark' : 'onLight'}
-          style={{ marginBottom: 20 }}
-          onPublished={() => refetchStories()}
-        />
-        {!!data?.pendingLeaves && (
-          <LeaveAlert count={data.pendingLeaves} onPress={handleLeavesPress} isDark={isDark} />
-        )}
-        {!isViewingAsAdmin && <StaffAttendanceQuickCard isDark={isDark} />}
-        <UpcomingEventsWidget role="staff" />
-        <SectionLabel label="ACADEMIC TODAY" isDark={isDark} />
-        <TouchableOpacity
-          onPress={() => navigateToStaffRoute('/staff/academic-today')}
-          style={{
-            backgroundColor: isDark ? 'rgba(99,102,241,0.16)' : '#EEF2FF',
-            borderRadius: 20,
-            padding: 16,
-            marginBottom: 16,
-          }}
-        >
-          <Text style={{ color: '#4F46E5', fontWeight: '800' }}>Continue teaching</Text>
-          <Text style={{ color: isDark ? '#CBD5E1' : '#475569', marginTop: 4 }}>
-            Today's topic is already mapped from timetable and curriculum.
-          </Text>
-        </TouchableOpacity>
-        <SectionLabel label="TODAY'S CLASS" isDark={isDark} />
-        <AttendanceHero
-          data={data}
-          onPress={handleManageStudentsPress}
-          isDark={isDark}
-        />
-        <SectionLabel label="QUICK ACTIONS" isDark={isDark} />
-        <View style={styles.menuGrid}>
-          {menuItems.map((item, index) => (
-            <MenuCard
-              key={item.route}
-              title={item.title}
-              subtitle={item.subtitle}
-              configKey={item.configKey}
-              badge={(item as any).badge}
-              onPress={() => navigateToStaffRoute(item.route)}
-              index={index}
-              isDark={isDark}
-            />
-          ))}
+        <View style={styles.heroBand}>
+          {isViewingAsAdmin && (
+            <View style={styles.heroBannerPad}>
+              <ViewAsBanner name={viewAsName} />
+            </View>
+          )}
+          <StaffHero
+            firstName={firstName}
+            roleLine={roleLine}
+            chipLabel={SCHOOL_CONFIG.name}
+            photoUrl={photoUrl}
+            pendingLeaves={data?.pendingLeaves || 0}
+            unreadUpdates={popupUnread || 0}
+            slides={heroSlides ?? []}
+            stories={schoolStories ?? []}
+            canAddStories={!isViewingAsAdmin}
+            addPhotoUrl={photoUrl}
+            disableAccountSwitch={isViewingAsAdmin}
+            onReviewLeaves={handleLeavesPress}
+            onViewUpdates={handleUpdatesPress}
+            onViewNotifications={handleNotificationsPress}
+            onPublished={() => { void refetchStories(); }}
+          />
         </View>
-        <View style={{ height: 90 }} />
+        <View style={styles.body}>
+          {!isViewingAsAdmin && <StaffAttendanceQuickCard isDark={isDark} />}
+          <UpcomingEventsWidget role="staff" />
+          <AcademicTodayCard
+            isDark={isDark}
+            onPress={() => navigateToStaffRoute('/staff/academic-today')}
+          />
+          <AttendanceHero
+            data={data}
+            onPress={handleManageStudentsPress}
+            isDark={isDark}
+          />
+          <DailySparkWidget />
+          <SectionLabel label="QUICK ACTIONS" isDark={isDark} />
+          <View style={styles.menuGrid}>
+            {menuItems.map((item, index) => (
+              <MenuCard
+                key={item.route}
+                title={item.title}
+                subtitle={item.subtitle}
+                configKey={item.configKey}
+                badge={(item as any).badge}
+                onPress={() => {
+                  if (item.route.startsWith('/Screen/')) {
+                    router.push(item.route as any);
+                    return;
+                  }
+                  navigateToStaffRoute(item.route);
+                }}
+                index={index}
+                isDark={isDark}
+              />
+            ))}
+          </View>
+          <View style={{ height: 90 }} />
+        </View>
       </Animated.ScrollView>
     </View>
   );
@@ -1747,7 +1599,10 @@ const mc = StyleSheet.create({
 // ─── Shared Styles ────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  scroll: { paddingTop: 76, paddingHorizontal: 20, paddingBottom: 40 },
+  scroll: { paddingBottom: 40 },
+  heroBand: { backgroundColor: '#15245C', paddingTop: 76 },
+  heroBannerPad: { paddingHorizontal: 18, paddingBottom: 8 },
+  body: { paddingHorizontal: 20, paddingTop: 20 },
   orb: { position: 'absolute' },
 
   // ── Hero Banner ──────────────────────────────────────────────────────────
@@ -1771,9 +1626,9 @@ const styles = StyleSheet.create({
   leaveCountText: { fontSize: 12, fontWeight: '800', color: '#000' },
 
   // ── Section Label ────────────────────────────────────────────────────────
-  sectionLabel: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, marginTop: 4 },
-  sectionAccent: { width: 3, height: 14, borderRadius: 2, marginRight: 9 },
-  sectionLabelText: { fontSize: 10, fontWeight: '700', letterSpacing: 2.4 },
+  sectionLabel: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, marginTop: 8 },
+  sectionAccent: { width: 3, height: 16, borderRadius: 2, marginRight: 9 },
+  sectionLabelText: { fontSize: 11, fontWeight: '700', letterSpacing: 1.6 },
 
   // ── Attendance Hero Card ─────────────────────────────────────────────────
   heroCard: { borderRadius: 24, borderWidth: 1, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.10, shadowRadius: 20, elevation: 6 },

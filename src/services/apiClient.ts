@@ -57,7 +57,7 @@ export const getApiBaseUrl = () => {
   return url;
 };
 
-const API_BASE_URL = getApiBaseUrl();
+export const API_BASE_URL = getApiBaseUrl();
 
 const TOKEN_KEY = 'access_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
@@ -224,6 +224,21 @@ export interface APIOptions extends RequestInit {
   omitAuth?: boolean;
 }
 
+/**
+ * Endpoints are relative to API_BASE_URL, which already includes `/api/v1`.
+ * Call sites that pass `/api/v1/...` would otherwise hit `/api/v1/api/v1/...`.
+ */
+export function normalizeApiEndpoint(endpoint: string, baseUrl: string = API_BASE_URL): string {
+  const trimmedBase = baseUrl.replace(/\/+$/, '');
+  const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  if (!trimmedBase.endsWith('/api/v1')) return path;
+  if (path === '/api/v1' || path.startsWith('/api/v1/')) {
+    const stripped = path.slice('/api/v1'.length);
+    return stripped.startsWith('/') ? stripped : `/${stripped}`;
+  }
+  return path;
+}
+
 function buildGetDedupeKey(endpoint: string, method: string, staffPortalId?: string): string | null {
   if (method !== 'GET') return null;
   const sep = endpoint.includes('?') ? '&' : '?';
@@ -235,6 +250,7 @@ export async function apiRequest<T>(
   endpoint: string,
   options: APIOptions = {})
   : Promise<T> {
+  endpoint = normalizeApiEndpoint(endpoint);
   const method = (options.method || 'GET').toUpperCase();
   const staffPortalId = options._staffPortalId
     ?? (shouldAttachStaffPortalHeader(endpoint) ? getStaffPortalSession().staffId : undefined);
@@ -600,6 +616,7 @@ async function apiRequestInner<T>(
 
 /** Download a binary file (e.g. Excel) using the same Supabase auth as apiRequest. */
 export async function downloadFile(endpoint: string, filename: string): Promise<void> {
+  endpoint = normalizeApiEndpoint(endpoint);
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token ?? null;
 

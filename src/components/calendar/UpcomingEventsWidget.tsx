@@ -1,12 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../../hooks/useTheme';
-import { clayCard } from '../../theme/clayStyles';
+import { clayCard, clayInset } from '../../theme/clayStyles';
+import { clayTokens } from '../../styles/clayTokens';
 import { CalendarEvent, calendarService } from '../../services/calendarService';
 import { EVENT_TYPE_CONFIG, formatEventDateRange } from './CalendarTheme';
 import { EventDetailModal } from './EventDetailModal';
+
+const BRAND = clayTokens.colors.brand;
 
 interface Props {
   role?: 'admin' | 'staff' | 'student' | 'parent';
@@ -66,35 +71,58 @@ export const UpcomingEventsWidget: React.FC<Props> = ({
     return eventDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
   };
 
+  const todayLabel = new Date().toLocaleDateString('en-IN', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  });
+  const emptyBody =
+    role === 'admin'
+      ? 'Publish an event and it will land here first.'
+      : 'Nothing scheduled yet — tap View all.';
+
   return (
-    <View style={styles.container}>
-      {/* Widget Header */}
+    <Animated.View entering={FadeInDown.delay(60).duration(320)} style={styles.wrap}>
+      <View style={styles.container}>
+      <View style={styles.inner}>
+      <LinearGradient
+        colors={isDark ? ['rgba(255,255,255,0.07)', 'rgba(255,255,255,0)'] : ['rgba(255,255,255,0.22)', 'rgba(255,255,255,0)']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0.7, y: 1 }}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+
       <View style={styles.header}>
         <View style={styles.headerTitleRow}>
           <View style={styles.headerIcon}>
-            <Ionicons name="calendar-outline" size={16} color="#4F46E5" />
+            <Ionicons name="calendar" size={16} color={BRAND.violet} />
           </View>
-          <Text style={styles.headerTitle}>Academic Calendar</Text>
+          <View>
+            <Text style={styles.headerTitle}>School calendar</Text>
+            <Text style={styles.headerSub}>{todayLabel}</Text>
+          </View>
         </View>
 
-        <TouchableOpacity
-          style={styles.viewAllBtn}
+        <Pressable
+          style={({ pressed }) => [styles.viewAllBtn, pressed && { opacity: 0.85, transform: [{ scale: 0.97 }] }]}
           onPress={() => router.push(resolvedCalendarRoute as any)}
-          activeOpacity={0.7}
+          hitSlop={8}
         >
-          <Text style={styles.viewAllText}>View All</Text>
-          <Ionicons name="chevron-forward" size={14} color="#4F46E5" />
-        </TouchableOpacity>
+          <Text style={styles.viewAllText}>View all</Text>
+          <Ionicons name="chevron-forward" size={14} color={BRAND.violet} />
+        </Pressable>
       </View>
 
-      {/* Content */}
       {loading ? (
         <View style={styles.loadingBox}>
-          <ActivityIndicator size="small" color="#4F46E5" />
+          <ActivityIndicator size="small" color={BRAND.violet} />
+          <Text style={styles.loadingText}>Checking the week…</Text>
         </View>
       ) : events.length === 0 ? (
         <View style={styles.emptyBox}>
-          <Text style={styles.emptyText}>No upcoming events scheduled</Text>
+          <Ionicons name="leaf-outline" size={16} color={BRAND.violet} />
+          <Text style={styles.emptyText} numberOfLines={1}>{emptyBody}</Text>
         </View>
       ) : (
         <View style={styles.eventList}>
@@ -104,14 +132,14 @@ export const UpcomingEventsWidget: React.FC<Props> = ({
             const isTodayOrTomorrow = countdown === 'Today' || countdown === 'Tomorrow';
 
             return (
-              <TouchableOpacity
+              <Pressable
                 key={ev.id}
-                style={[
+                style={({ pressed }) => [
                   styles.eventRow,
                   { borderLeftColor: ev.color || cfg.color },
+                  pressed && { opacity: 0.9, transform: [{ scale: 0.985 }] },
                 ]}
                 onPress={() => setSelectedEvent(ev)}
-                activeOpacity={0.75}
               >
                 <View style={styles.eventLeft}>
                   <View
@@ -154,13 +182,14 @@ export const UpcomingEventsWidget: React.FC<Props> = ({
                     {cfg.label}
                   </Text>
                 </View>
-              </TouchableOpacity>
+              </Pressable>
             );
           })}
         </View>
       )}
+      </View>
+      </View>
 
-      {/* Event Detail Modal */}
       <EventDetailModal
         visible={!!selectedEvent}
         event={selectedEvent}
@@ -168,78 +197,111 @@ export const UpcomingEventsWidget: React.FC<Props> = ({
         isAdmin={role === 'admin'}
         onEventUpdated={fetchUpcoming}
       />
-    </View>
+    </Animated.View>
   );
 };
 
 function getStyles(theme: any, isDark: boolean) {
+  const ink = isDark ? '#F0F2FF' : '#2A3142';
+  const muted = isDark ? 'rgba(240,242,255,0.58)' : '#6B7590';
+
   return StyleSheet.create({
+    wrap: {
+      marginBottom: 12,
+    },
     container: {
       ...clayCard(isDark, 'sm'),
-      padding: 16,
-      marginBottom: 16,
+      borderRadius: 20,
+    },
+    inner: {
+      padding: 14,
+      borderRadius: 20,
+      overflow: 'hidden',
     },
     header: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      marginBottom: 12,
+      marginBottom: 10,
+      gap: 8,
     },
     headerTitleRow: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
+      flex: 1,
     },
     headerIcon: {
-      width: 28,
-      height: 28,
-      borderRadius: 8,
-      backgroundColor: isDark ? 'rgba(79, 70, 229, 0.2)' : '#EEF2FF',
+      width: 32,
+      height: 32,
+      borderRadius: 10,
+      backgroundColor: isDark ? 'rgba(108,99,255,0.20)' : BRAND.violetSoft,
       alignItems: 'center',
       justifyContent: 'center',
     },
     headerTitle: {
-      fontSize: 15,
+      fontSize: 14,
       fontWeight: '700',
-      color: theme.colors.text,
+      color: ink,
       letterSpacing: -0.2,
+    },
+    headerSub: {
+      fontSize: 11,
+      fontWeight: '500',
+      color: muted,
+      marginTop: 1,
     },
     viewAllBtn: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 2,
+      minHeight: 32,
+      paddingHorizontal: 10,
+      borderRadius: 999,
+      backgroundColor: isDark ? 'rgba(108,99,255,0.16)' : BRAND.violetSoft,
     },
     viewAllText: {
-      fontSize: 12,
-      fontWeight: '600',
-      color: '#4F46E5',
+      fontSize: 11,
+      fontWeight: '700',
+      color: BRAND.violet,
     },
     loadingBox: {
-      paddingVertical: 20,
+      paddingVertical: 8,
       alignItems: 'center',
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 8,
+    },
+    loadingText: {
+      fontSize: 12,
+      fontWeight: '500',
+      color: muted,
     },
     emptyBox: {
-      paddingVertical: 16,
+      flexDirection: 'row',
       alignItems: 'center',
+      gap: 8,
+      paddingVertical: 2,
     },
     emptyText: {
-      fontSize: 13,
-      color: isDark ? '#94A3B8' : '#64748B',
+      flex: 1,
+      fontSize: 12,
+      fontWeight: '500',
+      color: muted,
+      lineHeight: 16,
     },
     eventList: {
-      gap: 8,
+      gap: 6,
     },
     eventRow: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : '#F8FAFC',
+      ...clayInset(isDark),
       paddingVertical: 8,
       paddingHorizontal: 10,
-      borderRadius: 10,
+      borderRadius: 12,
       borderLeftWidth: 3,
-      borderWidth: 1,
-      borderColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(15, 23, 42, 0.04)',
     },
     eventLeft: {
       flexDirection: 'row',
@@ -249,47 +311,47 @@ function getStyles(theme: any, isDark: boolean) {
       marginRight: 8,
     },
     countdownPill: {
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-      borderRadius: 6,
-      backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : '#E2E8F0',
-      minWidth: 54,
+      paddingHorizontal: 7,
+      paddingVertical: 4,
+      borderRadius: 8,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#E7EBF4',
+      minWidth: 56,
       alignItems: 'center',
     },
     countdownActive: {
-      backgroundColor: isDark ? 'rgba(79, 70, 229, 0.3)' : '#EEF2FF',
+      backgroundColor: isDark ? 'rgba(108,99,255,0.24)' : BRAND.violetSoft,
     },
     countdownText: {
       fontSize: 11,
-      fontWeight: '600',
+      fontWeight: '700',
       color: isDark ? '#CBD5E1' : '#475569',
     },
     countdownTextActive: {
-      color: '#4F46E5',
-      fontWeight: '700',
+      color: BRAND.violet,
+      fontWeight: '800',
     },
     eventInfo: {
       flex: 1,
     },
     eventTitle: {
       fontSize: 13,
-      fontWeight: '600',
-      color: theme.colors.text,
+      fontWeight: '700',
+      color: ink,
     },
     eventMeta: {
       fontSize: 11,
-      color: isDark ? '#94A3B8' : '#64748B',
+      color: muted,
       marginTop: 2,
     },
     typeBadge: {
       paddingHorizontal: 8,
-      paddingVertical: 3,
-      borderRadius: 6,
+      paddingVertical: 4,
+      borderRadius: 10,
       borderWidth: 1,
     },
     typeBadgeText: {
       fontSize: 10,
-      fontWeight: '600',
+      fontWeight: '700',
     },
   });
 }

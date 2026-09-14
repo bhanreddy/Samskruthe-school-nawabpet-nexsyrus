@@ -47,6 +47,7 @@ import LogoLoader from '../../src/components/LogoLoader';
 import ScreenLayout from '../../src/components/ScreenLayout';
 import StudentHeader from '../../src/components/StudentHeader';
 import StudentHero from '../../src/components/student-hero/StudentHero';
+import { DailySparkWidget } from '../../src/components/content/DailySparkWidget';
 import { ParentAcademicCard } from '../../src/components/academic/ParentAcademicCard';
 import { SCHOOL_CONFIG } from '../../src/constants/schoolConfig';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -1336,6 +1337,9 @@ const HomeScreen = () => {
             width: '100%',
             alignSelf: 'center',
           }]}>
+            {/* Daily Spark Content Engine Widget */}
+            <DailySparkWidget />
+
             {/* 1. Snapshot — HERO */}
             {isEnabled('home.todays_snapshot') && (
               <Animated.View entering={FadeInUp.delay(160).duration(700).springify()}>

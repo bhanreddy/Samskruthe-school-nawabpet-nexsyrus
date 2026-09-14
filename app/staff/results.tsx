@@ -12,11 +12,15 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   View,
   ViewStyle,
   useWindowDimensions,
 } from 'react-native';
+import { KeyboardStickyView } from 'react-native-keyboard-controller';
 import KeyboardAwareScreen from '@/components/keyboard/KeyboardAwareScreen';
+import { styles as themeInputStyles } from '@/src/theme/styles';
+import { clayTokens } from '@/src/styles/clayTokens';
 import { alertCompat } from '../../src/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -61,6 +65,7 @@ import {
   isComponentAssessmentAbsent,
   isComponentAssessmentComplete,
   isValidAssessmentInput,
+  numericOrNullComponentMark,
   normalizeAssessmentInput,
   parseComponentMaximums,
   rankAssessmentScores,
@@ -210,6 +215,7 @@ function ResultsFilterDropdown({
   disabled = false,
   compact = false,
   halfWidth = false,
+  dense = false,
   emptyText = 'No options available',
   footerAction,
 }: {
@@ -223,6 +229,7 @@ function ResultsFilterDropdown({
   disabled?: boolean;
   compact?: boolean;
   halfWidth?: boolean;
+  dense?: boolean;
   emptyText?: string;
   footerAction?: { label: string; onPress: () => void };
 }) {
@@ -239,9 +246,12 @@ function ResultsFilterDropdown({
         filterDropdownStyles.wrap,
         compact && filterDropdownStyles.wrapCompact,
         halfWidth && filterDropdownStyles.wrapHalf,
+        dense && filterDropdownStyles.wrapDense,
       ]}
     >
-      <Text style={[filterDropdownStyles.label, { color: mutedText }]}>{label}</Text>
+      {dense ? null : (
+        <Text style={[filterDropdownStyles.label, { color: mutedText }]}>{label}</Text>
+      )}
       <Pressable
         disabled={disabled}
         onPress={() => setOpen(true)}
@@ -251,7 +261,8 @@ function ResultsFilterDropdown({
         style={({ hovered, pressed }) => [
           filterDropdownStyles.trigger,
           isDark && filterDropdownStyles.triggerDark,
-          value && { borderColor: `${accent}88` },
+          dense && filterDropdownStyles.triggerDense,
+          value && { borderColor: `${accent}66` },
           (hovered || pressed) && !disabled && { borderColor: accent },
           disabled && filterDropdownStyles.disabled,
         ]}
@@ -377,6 +388,11 @@ const filterDropdownStyles = StyleSheet.create({
     minWidth: 140,
     flexBasis: '46%',
   },
+  wrapDense: {
+    flexGrow: 1,
+    flexBasis: 0,
+    minWidth: 0,
+  },
   label: {
     paddingLeft: 2,
     fontSize: 11,
@@ -385,16 +401,23 @@ const filterDropdownStyles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   trigger: {
-    minHeight: 44,
+    minHeight: 48,
     paddingHorizontal: 13,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
+    borderRadius: clayTokens.radii.input,
+    borderWidth: 1.5,
+    borderColor: 'rgba(76,90,120,0.12)',
+    backgroundColor: clayTokens.colors.inset.light,
+    borderBottomWidth: 1.5,
+    borderBottomColor: 'rgba(76,90,120,0.10)',
+  },
+  triggerDense: {
+    minHeight: 40,
+    paddingHorizontal: 10,
     borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(148,163,184,0.22)',
-    backgroundColor: 'rgba(255,255,255,0.68)',
   },
   triggerDark: {
     borderColor: 'rgba(255,255,255,0.10)',
@@ -638,7 +661,7 @@ function ProgressTrack({ progress, accent }: { progress: number; accent: string 
   }, [animatedProgress, clamped, reduceMotion]);
 
   const fillStyle = useAnimatedStyle(() => ({
-    width: `${animatedProgress.value * 100}%`,
+    transform: [{ scaleX: animatedProgress.value }],
   }));
 
   return (
@@ -660,14 +683,15 @@ function ProgressTrack({ progress, accent }: { progress: number; accent: string 
 
 const progressStyles = StyleSheet.create({
   track: {
-    height: 6,
+    height: 8,
     borderRadius: 99,
     backgroundColor: 'rgba(76,90,120,0.12)',
     overflow: 'hidden',
   },
   fill: {
-    height: '100%',
+    ...StyleSheet.absoluteFillObject,
     borderRadius: 99,
+    transformOrigin: 'left center',
   },
 });
 
@@ -743,11 +767,332 @@ function StudentsSkeleton() {
 
 const skeletonCard: ViewStyle = {
   padding: 14,
-  borderRadius: 18,
+  borderRadius: clayTokens.radii.card,
   borderWidth: 1,
   borderColor: 'rgba(148,163,184,0.14)',
   backgroundColor: 'rgba(255,255,255,0.35)',
 };
+
+type RosterFilter = 'all' | 'remaining' | 'entered' | 'absent';
+type MarksInputKey = `${string}:${ComponentField | 'consolidated'}`;
+
+function MarkField({
+  value,
+  max,
+  label,
+  accessibilityLabel,
+  accent,
+  isDark,
+  filled,
+  onChangeText,
+  onSubmitEditing,
+  onFocus,
+  inputRef,
+  compact = false,
+}: {
+  value: string;
+  max: number | string;
+  label?: string;
+  accessibilityLabel: string;
+  accent: string;
+  isDark: boolean;
+  filled: boolean;
+  onChangeText: (text: string) => void;
+  onSubmitEditing: () => void;
+  onFocus: () => void;
+  inputRef: (node: TextInput | null) => void;
+  compact?: boolean;
+}) {
+  const [focused, setFocused] = useState(false);
+  const fieldAbsent = isAbsentAssessmentInput(value);
+  return (
+    <View style={{ flexGrow: 1, flexBasis: compact ? '46%' : 72, minWidth: compact ? 118 : 72 }}>
+      {label ? (
+        <View style={markFieldStyles.labelRow}>
+          <Text style={markFieldStyles.label} numberOfLines={1}>{label}</Text>
+          <Text style={markFieldStyles.max}>/{max}</Text>
+          <Pressable
+            onPress={() => onChangeText(fieldAbsent ? '' : 'A')}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={fieldAbsent ? `Clear absent for ${label}` : `Mark ${label} absent`}
+            accessibilityState={{ selected: fieldAbsent }}
+          >
+            <Text style={[markFieldStyles.abChip, fieldAbsent && markFieldStyles.abChipActive]}>
+              AB
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
+      <AppTextInput
+        ref={inputRef}
+        accessibilityLabel={accessibilityLabel}
+        style={[
+          markFieldStyles.input,
+          compact && markFieldStyles.inputCompact,
+          isDark && markFieldStyles.inputDark,
+          filled && !fieldAbsent && { borderColor: `${accent}88`, backgroundColor: isDark ? `${accent}22` : `${accent}14` },
+          fieldAbsent && markFieldStyles.inputAbsent,
+          focused && { borderColor: fieldAbsent ? clayTokens.colors.absent.bg : accent },
+        ]}
+        placeholder="—"
+        placeholderTextColor="#9AA3B8"
+        keyboardType={Platform.OS === 'web' ? 'default' : 'decimal-pad'}
+        inputMode="decimal"
+        autoCapitalize="characters"
+        maxLength={6}
+        value={fieldAbsent ? 'AB' : value}
+        selectTextOnFocus
+        returnKeyType="next"
+        blurOnSubmit={false}
+        accessibilityHint="Enter marks, or tap AB if this component was missed"
+        onChangeText={onChangeText}
+        onSubmitEditing={onSubmitEditing}
+        onFocus={() => {
+          setFocused(true);
+          onFocus();
+        }}
+        onBlur={() => setFocused(false)}
+      />
+    </View>
+  );
+}
+
+const markFieldStyles = StyleSheet.create({
+  labelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+    paddingHorizontal: 2,
+    gap: 6,
+  },
+  label: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: '700',
+    color: clayTokens.colors.text.muted,
+    letterSpacing: 0.2,
+  },
+  max: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: clayTokens.colors.text.muted,
+  },
+  abChip: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+    color: clayTokens.colors.text.muted,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    overflow: 'hidden',
+    borderRadius: 8,
+  },
+  abChipActive: {
+    color: clayTokens.colors.absent.bg,
+    backgroundColor: clayTokens.colors.brand.roseSoft,
+  },
+  input: {
+    height: 52,
+    paddingVertical: 0,
+    borderWidth: 1.5,
+    borderColor: 'rgba(76,90,120,0.16)',
+    borderRadius: clayTokens.radii.input,
+    textAlign: 'center',
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+    color: clayTokens.colors.text.primary,
+    backgroundColor: clayTokens.colors.inset.light,
+    borderBottomWidth: 1.5,
+    borderBottomColor: 'rgba(76,90,120,0.12)',
+  },
+  inputCompact: {
+    height: 48,
+    fontSize: 18,
+  },
+  inputDark: {
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: clayTokens.colors.inset.dark,
+    color: '#F8FAFC',
+    borderBottomColor: 'rgba(0,0,0,0.35)',
+  },
+  inputAbsent: {
+    borderColor: 'rgba(210,65,81,0.45)',
+    backgroundColor: clayTokens.colors.brand.roseSoft,
+    color: clayTokens.colors.absent.bg,
+  },
+});
+
+const StudentAssessmentCard = React.memo(function StudentAssessmentCard({
+  student,
+  assessmentSchema,
+  componentMarks,
+  consolidatedValue,
+  consolidatedMax,
+  componentMaximums,
+  result,
+  rank,
+  attendance,
+  rankingMethod,
+  entered,
+  isAbsent,
+  accent,
+  isDark,
+  styles,
+  onComponentMarkChange,
+  onConsolidatedMarkChange,
+  onToggleAbsent,
+  onFocusField,
+  onSubmitField,
+  registerInput,
+}: {
+  student: StudentWithDetails;
+  assessmentSchema: AssessmentSchema;
+  componentMarks: ComponentAssessmentInput;
+  consolidatedValue: string;
+  consolidatedMax: string;
+  componentMaximums: Record<ComponentField, number>;
+  result: { obtained: number; maximum: number; percentage: number; grade: string; gpa: number; rank: number };
+  rank: number | undefined;
+  attendance: number | null | undefined;
+  rankingMethod: ResultRankingMethod;
+  entered: boolean;
+  isAbsent: boolean;
+  accent: string;
+  isDark: boolean;
+  styles: Record<string, any>;
+  onComponentMarkChange: (studentId: string, field: ComponentField, text: string) => void;
+  onConsolidatedMarkChange: (studentId: string, text: string) => void;
+  onToggleAbsent: (studentId: string) => void;
+  onFocusField: (studentId: string, field: ComponentField | 'consolidated') => void;
+  onSubmitField: (studentId: string, field: ComponentField | 'consolidated') => void;
+  registerInput: (key: MarksInputKey, node: TextInput | null) => void;
+}) {
+  const displayName = student.person.display_name ??
+    `${student.person.first_name} ${student.person.last_name}`;
+  const componentResult = calculateComponentAssessment(componentMarks, componentMaximums);
+
+  return (
+    <View style={[styles.assessmentStudentCard, isAbsent && styles.assessmentStudentCardAbsent]}>
+      <View style={styles.assessmentStudentHeader}>
+        <View style={styles.studentAvatar}>
+          <StudentPhoto
+            photoUrl={student.person.photo_url}
+            displayName={displayName}
+            size={40}
+            borderRadius={12}
+            fallbackTextStyle={styles.studentAvatarText}
+          />
+        </View>
+        <View style={styles.studentInfo}>
+          <Text style={styles.studentName} numberOfLines={1}>{displayName}</Text>
+          <Text style={styles.studentRoll}>#{student.admission_no}</Text>
+        </View>
+        {entered && !isAbsent ? (
+          <View style={[styles.gradeBadge, { backgroundColor: `${accent}18` }]}>
+            <Text style={[styles.gradeBadgeText, { color: accent }]}>{result.grade}</Text>
+          </View>
+        ) : null}
+        <PressScale
+          onPress={() => onToggleAbsent(student.id)}
+          accessibilityLabel={isAbsent ? `Clear absent for ${displayName}` : `Mark ${displayName} absent`}
+        >
+          <View style={[styles.absentChip, isAbsent && styles.absentChipActive]}>
+            <Ionicons
+              name={isAbsent ? 'close-circle' : 'remove-circle-outline'}
+              size={14}
+              color={isAbsent ? '#FFFFFF' : clayTokens.colors.absent.bg}
+            />
+            <Text style={[styles.absentChipText, isAbsent && styles.absentChipTextActive]}>
+              {isAbsent ? 'Absent' : 'Absent'}
+            </Text>
+          </View>
+        </PressScale>
+      </View>
+
+      {assessmentSchema === 'component' ? (
+        <View style={styles.componentGrid}>
+          {COMPONENT_FIELDS.map(({ field, label, shortLabel }) => (
+            <MarkField
+              key={field}
+              compact
+              value={componentMarks[field]}
+              max={componentMaximums[field]}
+              label={shortLabel}
+              accessibilityLabel={`${label}, maximum ${componentMaximums[field]}`}
+              accent={accent}
+              isDark={isDark}
+              filled={componentMarks[field] !== ''}
+              onChangeText={(text) => onComponentMarkChange(student.id, field, text)}
+              onSubmitEditing={() => onSubmitField(student.id, field)}
+              onFocus={() => onFocusField(student.id, field)}
+              inputRef={(node) => registerInput(`${student.id}:${field}`, node)}
+            />
+          ))}
+        </View>
+      ) : (
+        <View style={styles.consolidatedEntryRow}>
+          <View style={styles.consolidatedCopy}>
+            <Text style={styles.consolidatedLabel}>Marks obtained</Text>
+            <Text style={styles.consolidatedHint}>Out of {consolidatedMax || DEFAULT_CONSOLIDATED_MAX}</Text>
+          </View>
+          <MarkField
+            value={consolidatedValue}
+            max={consolidatedMax || DEFAULT_CONSOLIDATED_MAX}
+            accessibilityLabel={`Marks obtained by ${displayName}`}
+            accent={accent}
+            isDark={isDark}
+            filled={consolidatedValue !== ''}
+            onChangeText={(text) => onConsolidatedMarkChange(student.id, text)}
+            onSubmitEditing={() => onSubmitField(student.id, 'consolidated')}
+            onFocus={() => onFocusField(student.id, 'consolidated')}
+            inputRef={(node) => registerInput(`${student.id}:consolidated`, node)}
+          />
+        </View>
+      )}
+
+      {entered ? (
+        <View style={styles.liveTotalsRow}>
+          <Text style={styles.liveTotalStrong}>
+            {isAbsent
+              ? 'Absent'
+              : `${result.obtained}/${result.maximum}`}
+          </Text>
+          {!isAbsent ? (
+            <>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveTotalMuted}>{result.percentage.toFixed(1)}%</Text>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveTotalMuted}>
+                {assessmentSchema === 'component' ? `GPA ${result.gpa.toFixed(1)}` : result.grade}
+              </Text>
+              {assessmentSchema === 'component' ? (
+                <>
+                  <View style={styles.liveDot} />
+                  <Text style={styles.liveTotalMuted}>{componentResult.weightage.toFixed(1)}/20</Text>
+                </>
+              ) : null}
+            </>
+          ) : null}
+          <View style={styles.liveDot} />
+          <Text style={[styles.liveTotalStrong, { color: accent }]}>#{rank ?? '—'}</Text>
+          {rankingMethod === 'attendance_tiebreak' ? (
+            <>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveTotalMuted}>
+                {attendance == null ? 'Att —' : `${Number(attendance).toFixed(0)}% att`}
+              </Text>
+            </>
+          ) : null}
+        </View>
+      ) : (
+        <Text style={styles.pendingHint}>Next: fill marks, tap AB on a missed part, or Absent for the whole exam</Text>
+      )}
+    </View>
+  );
+});
 
 function parseExamIndex(name: string, prefix: string): number | null {
   const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -844,6 +1189,11 @@ export default function UploadMarks() {
   const [assessmentStorageReady, setAssessmentStorageReady] = useState(false);
   const [rankingMethod, setRankingMethod] = useState<ResultRankingMethod>('competition');
   const [attendanceByStudent, setAttendanceByStudent] = useState<Record<string, number | null>>({});
+  const [studentQuery, setStudentQuery] = useState('');
+  const [rosterFilter, setRosterFilter] = useState<RosterFilter>('all');
+  const [setupCollapsed, setSetupCollapsed] = useState(false);
+  const [focusedStudentId, setFocusedStudentId] = useState<string | null>(null);
+  const inputRefs = useRef<Partial<Record<MarksInputKey, TextInput | null>>>({});
 
   // ── assignment / filter state ────────────────────────────────────────────────
   const [assignments, setAssignments] = useState<TeacherClassAssignment[]>([]);
@@ -942,9 +1292,41 @@ export default function UploadMarks() {
   }, [assessmentSchema, currentDraft]);
 
   const fillPercent = students.length === 0 ? 0 : filledCount / students.length;
+  const remainingCount = Math.max(0, students.length - filledCount);
+  const absentCount = useMemo(() => {
+    return students.filter((student) => {
+      if (assessmentSchema === 'component') {
+        return isComponentAssessmentAbsent(currentDraft.componentByStudent[student.id] ?? EMPTY_COMPONENT_MARKS);
+      }
+      return isAbsentAssessmentInput(currentDraft.consolidatedByStudent[student.id]);
+    }).length;
+  }, [assessmentSchema, currentDraft, students]);
   const contextLabel = selectedAssignment
     ? `${selectedAssignment.class_name}-${selectedAssignment.section_name} · ${selectedAssignment.subject_name} · ${selectedSubExam}`
     : 'Choose class, subject and exam';
+
+  const visibleStudents = useMemo(() => {
+    const query = studentQuery.trim().toLowerCase();
+    return students.filter((student) => {
+      const displayName = (student.person.display_name ??
+        `${student.person.first_name} ${student.person.last_name}`).toLowerCase();
+      const roll = String(student.admission_no ?? '').toLowerCase();
+      if (query && !displayName.includes(query) && !roll.includes(query)) return false;
+
+      const componentMarks = currentDraft.componentByStudent[student.id] ?? EMPTY_COMPONENT_MARKS;
+      const isAbsent = assessmentSchema === 'component'
+        ? isComponentAssessmentAbsent(componentMarks)
+        : isAbsentAssessmentInput(currentDraft.consolidatedByStudent[student.id]);
+      const entered = assessmentSchema === 'component'
+        ? isAbsent || isComponentAssessmentComplete(componentMarks)
+        : (currentDraft.consolidatedByStudent[student.id] ?? '') !== '';
+
+      if (rosterFilter === 'remaining') return !entered;
+      if (rosterFilter === 'entered') return entered;
+      if (rosterFilter === 'absent') return isAbsent;
+      return true;
+    });
+  }, [assessmentSchema, currentDraft, rosterFilter, studentQuery, students]);
 
   const studentResults = useMemo(() => {
     return students.reduce<Record<string, ReturnType<typeof calculateConsolidatedAssessment> & { rank: number }>>(
@@ -1081,6 +1463,19 @@ export default function UploadMarks() {
     }
   }, [activeSubExams, selectedCategory, selectedSubExam]);
 
+  useEffect(() => {
+    setSetupCollapsed(false);
+    setStudentQuery('');
+    setRosterFilter('all');
+    setFocusedStudentId(null);
+  }, [selectedCategory?.key]);
+
+  useEffect(() => {
+    if (!studentsLoading && students.length > 0 && selectedAssignment && selectedSubExam) {
+      setSetupCollapsed(true);
+    }
+  }, [selectedAssignment, selectedSubExam, students.length, studentsLoading]);
+
   // 1. Load assignments on mount
   useEffect(() => {
     fetchAssignments();
@@ -1146,9 +1541,9 @@ export default function UploadMarks() {
             consolidatedByStudent[mark.student_id] = 'A';
             componentByStudent[mark.student_id] = {
               participation: 'A',
-              writtenWork: '',
-              projectWork: '',
-              slipTest: '',
+              writtenWork: 'A',
+              projectWork: 'A',
+              slipTest: 'A',
             };
           } else if (mark.consolidated_marks_obtained != null) {
             consolidatedByStudent[mark.student_id] = String(mark.consolidated_marks_obtained);
@@ -1162,11 +1557,21 @@ export default function UploadMarks() {
             mark.project_work_marks != null ||
             mark.slip_test_marks != null
           )) {
+            const hasAnyComponentValue = [
+              mark.participation_marks,
+              mark.written_work_marks,
+              mark.project_work_marks,
+              mark.slip_test_marks,
+            ].some((value) => value != null);
+            const fromServer = (value: number | null | undefined) => {
+              if (value != null) return String(value);
+              return hasAnyComponentValue ? 'A' : '';
+            };
             componentByStudent[mark.student_id] = {
-              participation: mark.participation_marks == null ? '' : String(mark.participation_marks),
-              writtenWork: mark.written_work_marks == null ? '' : String(mark.written_work_marks),
-              projectWork: mark.project_work_marks == null ? '' : String(mark.project_work_marks),
-              slipTest: mark.slip_test_marks == null ? '' : String(mark.slip_test_marks),
+              participation: fromServer(mark.participation_marks),
+              writtenWork: fromServer(mark.written_work_marks),
+              projectWork: fromServer(mark.project_work_marks),
+              slipTest: fromServer(mark.slip_test_marks),
             };
           }
         });
@@ -1241,13 +1646,13 @@ export default function UploadMarks() {
     setSelectedCategory(null);
   };
 
-  const updateCurrentDraft = (updater: (draft: AssessmentDraft) => AssessmentDraft) => {
+  const updateCurrentDraft = useCallback((updater: (draft: AssessmentDraft) => AssessmentDraft) => {
     if (!draftKey) return;
     setAssessmentDrafts((previous) => ({
       ...previous,
       [draftKey]: updater(previous[draftKey] ?? emptyAssessmentDraft(defaultConsolidatedMaximum)),
     }));
-  };
+  }, [defaultConsolidatedMaximum, draftKey]);
 
   const handleSchemaChange = (schema: AssessmentSchema) => {
     if (!schemaInstanceKey) return;
@@ -1286,31 +1691,118 @@ export default function UploadMarks() {
     });
   };
 
-  const handleConsolidatedMarkChange = (studentId: string, text: string) => {
-    const maximum = Number(currentDraft.consolidatedMaxMarks || DEFAULT_CONSOLIDATED_MAX);
+  const handleConsolidatedMarkChange = useCallback((studentId: string, text: string) => {
     const normalizedText = normalizeAssessmentInput(text);
-    if (!isValidAssessmentInput(normalizedText, maximum)) return;
-    updateCurrentDraft((draft) => ({
-      ...draft,
-      consolidatedByStudent: { ...draft.consolidatedByStudent, [studentId]: normalizedText },
-    }));
-  };
+    updateCurrentDraft((draft) => {
+      const maximum = Number(draft.consolidatedMaxMarks || DEFAULT_CONSOLIDATED_MAX);
+      if (!isValidAssessmentInput(normalizedText, maximum)) return draft;
+      return {
+        ...draft,
+        consolidatedByStudent: { ...draft.consolidatedByStudent, [studentId]: normalizedText },
+      };
+    });
+  }, [updateCurrentDraft]);
 
-  const handleComponentMarkChange = (studentId: string, field: ComponentField, text: string) => {
+  const handleComponentMarkChange = useCallback((studentId: string, field: ComponentField, text: string) => {
     const normalizedText = normalizeAssessmentInput(text);
-    if (!isValidAssessmentInput(normalizedText, componentMaximums[field])) return;
-    updateCurrentDraft((draft) => ({
-      ...draft,
-      componentByStudent: {
-        ...draft.componentByStudent,
-        [studentId]: updateComponentAssessmentInput(
-          draft.componentByStudent[studentId] ?? EMPTY_COMPONENT_MARKS,
-          field,
-          normalizedText,
-        ),
-      },
-    }));
-  };
+    updateCurrentDraft((draft) => {
+      const maximums = parseComponentMaximums(draft.componentMaximums);
+      if (!isValidAssessmentInput(normalizedText, maximums[field])) return draft;
+      return {
+        ...draft,
+        componentByStudent: {
+          ...draft.componentByStudent,
+          [studentId]: updateComponentAssessmentInput(
+            draft.componentByStudent[studentId] ?? EMPTY_COMPONENT_MARKS,
+            field,
+            normalizedText,
+          ),
+        },
+      };
+    });
+  }, [updateCurrentDraft]);
+
+  const handleToggleAbsent = useCallback((studentId: string) => {
+    if (assessmentSchema === 'component') {
+      updateCurrentDraft((draft) => {
+        const current = draft.componentByStudent[studentId] ?? EMPTY_COMPONENT_MARKS;
+        const nextAbsent = !isComponentAssessmentAbsent(current);
+        return {
+          ...draft,
+          componentByStudent: {
+            ...draft.componentByStudent,
+            [studentId]: nextAbsent
+              ? { participation: 'A', writtenWork: 'A', projectWork: 'A', slipTest: 'A' }
+              : EMPTY_COMPONENT_MARKS,
+          },
+        };
+      });
+    } else {
+      updateCurrentDraft((draft) => {
+        const current = draft.consolidatedByStudent[studentId] ?? '';
+        const next = isAbsentAssessmentInput(current) ? '' : 'A';
+        const maximum = Number(draft.consolidatedMaxMarks || DEFAULT_CONSOLIDATED_MAX);
+        if (!isValidAssessmentInput(next, maximum)) return draft;
+        return {
+          ...draft,
+          consolidatedByStudent: { ...draft.consolidatedByStudent, [studentId]: next },
+        };
+      });
+    }
+    if (Platform.OS !== 'web') void Haptics.selectionAsync();
+  }, [assessmentSchema, updateCurrentDraft]);
+
+  const registerInput = useCallback((key: MarksInputKey, node: TextInput | null) => {
+    inputRefs.current[key] = node;
+  }, []);
+
+  const fieldOrder = useMemo<(ComponentField | 'consolidated')[]>(
+    () => (assessmentSchema === 'component'
+      ? COMPONENT_FIELDS.map((item) => item.field)
+      : ['consolidated']),
+    [assessmentSchema],
+  );
+
+  const focusField = useCallback((studentId: string, field: ComponentField | 'consolidated') => {
+    setFocusedStudentId(studentId);
+  }, []);
+
+  const submitField = useCallback((studentId: string, field: ComponentField | 'consolidated') => {
+    const fieldIndex = fieldOrder.indexOf(field);
+    const nextField = fieldOrder[fieldIndex + 1];
+    if (nextField) {
+      const nextNode = inputRefs.current[`${studentId}:${nextField}`];
+      if (nextNode) {
+        nextNode.focus();
+        return;
+      }
+    }
+    const startIndex = visibleStudents.findIndex((student) => student.id === studentId) + 1;
+    for (let index = startIndex; index < visibleStudents.length; index += 1) {
+      const nextNode = inputRefs.current[`${visibleStudents[index].id}:${fieldOrder[0]}`];
+      if (nextNode) {
+        nextNode.focus();
+        return;
+      }
+    }
+    Keyboard.dismiss();
+  }, [fieldOrder, visibleStudents]);
+
+  const focusNextStudent = useCallback(() => {
+    const currentIndex = focusedStudentId
+      ? visibleStudents.findIndex((student) => student.id === focusedStudentId)
+      : -1;
+    const total = visibleStudents.length;
+    for (let offset = 1; offset <= total; offset += 1) {
+      const nextStudent = visibleStudents[(currentIndex + offset) % total];
+      if (!nextStudent) continue;
+      const nextNode = inputRefs.current[`${nextStudent.id}:${fieldOrder[0]}`];
+      if (nextNode) {
+        nextNode.focus();
+        return;
+      }
+    }
+  }, [fieldOrder, focusedStudentId, visibleStudents]);
 
   const handleAddSubExam = async () => {
     if (!selectedCategory) return;
@@ -1355,10 +1847,10 @@ export default function UploadMarks() {
           student_id: student.id,
           marks: result.obtained,
           is_absent: false,
-          participation_marks: Number(components.participation),
-          written_work_marks: Number(components.writtenWork),
-          project_work_marks: Number(components.projectWork),
-          slip_test_marks: Number(components.slipTest),
+          participation_marks: numericOrNullComponentMark(components.participation),
+          written_work_marks: numericOrNullComponentMark(components.writtenWork),
+          project_work_marks: numericOrNullComponentMark(components.projectWork),
+          slip_test_marks: numericOrNullComponentMark(components.slipTest),
         }];
       }
       const marks = currentDraft.consolidatedByStudent[student.id] ?? '';
@@ -1435,9 +1927,9 @@ export default function UploadMarks() {
         </View>
         <View style={styles.heroCopy}>
           <Text style={styles.eyebrow}>RESULTS &amp; ASSESSMENTS</Text>
-          <Text style={styles.pageTitle}>Choose an assessment</Text>
+          <Text style={styles.pageTitle}>Enter marks faster</Text>
           <Text style={styles.pageSubtitle}>
-            Select a category to choose an exam, class and subject, then enter student marks.
+            Pick a category, then type through the class. Absent is one tap. Upload stays in reach.
           </Text>
         </View>
         {!isPhone ? (
@@ -1548,6 +2040,10 @@ export default function UploadMarks() {
       );
     }
 
+    const maxSummary = assessmentSchema === 'component'
+      ? COMPONENT_FIELDS.map(({ field }) => currentDraft.componentMaximums[field]).join(' · ')
+      : currentDraft.consolidatedMaxMarks;
+
     return (
       <View style={styles.filterStack}>
         <View style={styles.filterDropdownRow}>
@@ -1561,7 +2057,8 @@ export default function UploadMarks() {
             accent={accentColor}
             mutedText={theme.colors.textSecondary}
             isDark={isDark}
-            halfWidth={isPhone}
+            halfWidth={!setupCollapsed && isPhone}
+            dense={setupCollapsed}
             onChange={setSelectedClassSectionId}
           />
           <ResultsFilterDropdown
@@ -1574,7 +2071,8 @@ export default function UploadMarks() {
             accent={accentColor}
             mutedText={theme.colors.textSecondary}
             isDark={isDark}
-            halfWidth={isPhone}
+            halfWidth={!setupCollapsed && isPhone}
+            dense={setupCollapsed}
             disabled={availableSubjects.length === 0}
             emptyText="No subjects for this class"
             onChange={setSelectedSubjectId}
@@ -1586,7 +2084,8 @@ export default function UploadMarks() {
             accent={accentColor}
             mutedText={theme.colors.textSecondary}
             isDark={isDark}
-            compact={isPhone}
+            compact={!setupCollapsed && isPhone}
+            dense={setupCollapsed}
             disabled={activeSubExams.length === 0}
             emptyText="No exams available"
             onChange={setSelectedSubExam}
@@ -1597,68 +2096,92 @@ export default function UploadMarks() {
           />
         </View>
 
-        <View style={styles.schemaRow}>
-          <SchemaToggle
-            value={assessmentSchema}
-            onChange={handleSchemaChange}
-            accent={accentColor}
-            mutedText={theme.colors.textSecondary}
-            isDark={isDark}
-          />
-          {assessmentSchema === 'consolidated' ? (
-            <View style={styles.maxMarksCompact}>
-              <Text style={styles.maxMarksCompactLabel}>Max</Text>
-              <AppTextInput
-                style={styles.maxMarksInput}
-                value={currentDraft.consolidatedMaxMarks}
-                onChangeText={handleMaxMarksChange}
-                  keyboardType="numeric"
-                  maxLength={3}
-                  selectTextOnFocus
-                  accessibilityLabel="Maximum marks"
+        {setupCollapsed ? (
+          <PressScale onPress={() => setSetupCollapsed(false)} accessibilityLabel="Edit marking scheme">
+            <View style={styles.setupSummary}>
+              <View style={styles.setupSummaryCopy}>
+                <Text style={styles.setupSummaryLabel}>
+                  {assessmentSchema === 'component' ? 'Components' : 'Consolidated'} · Max {maxSummary}
+                </Text>
+                <Text style={[styles.setupSummaryTotal, { color: accentColor }]}>
+                  Total {assessmentSchema === 'component' ? componentTotal : currentDraft.consolidatedMaxMarks}
+                </Text>
+              </View>
+              <Text style={[styles.setupSummaryAction, { color: accentColor }]}>Edit</Text>
+            </View>
+          </PressScale>
+        ) : (
+          <>
+            <View style={styles.schemaRow}>
+              <SchemaToggle
+                value={assessmentSchema}
+                onChange={handleSchemaChange}
+                accent={accentColor}
+                mutedText={theme.colors.textSecondary}
+                isDark={isDark}
               />
-            </View>
-          ) : null}
-        </View>
-        {assessmentSchema === 'component' ? (
-          <View style={styles.componentMaxPanel}>
-            <View style={styles.componentMaxHeader}>
-              <Text style={styles.componentMaxTitle}>Maximum marks</Text>
-              <Text style={[styles.componentMaxTotal, { color: accentColor }]}>Total {componentTotal}</Text>
-            </View>
-            <View style={styles.componentMaxGrid}>
-              {COMPONENT_FIELDS.map(({ field, shortLabel }) => (
-                <View key={field} style={styles.componentMaxItem}>
-                  <Text style={styles.componentMaxLabel} numberOfLines={1}>{shortLabel}</Text>
+              {assessmentSchema === 'consolidated' ? (
+                <View style={styles.maxMarksCompact}>
+                  <Text style={styles.maxMarksCompactLabel}>Max</Text>
                   <AppTextInput
-                    style={styles.componentMaxInput}
-                    value={currentDraft.componentMaximums[field]}
-                    onChangeText={(text) => handleComponentMaximumChange(field, text)}
+                    style={styles.maxMarksInput}
+                    value={currentDraft.consolidatedMaxMarks}
+                    onChangeText={handleMaxMarksChange}
                     keyboardType="numeric"
                     maxLength={3}
                     selectTextOnFocus
-                    accessibilityLabel={`Maximum marks for ${shortLabel}`}
+                    accessibilityLabel="Maximum marks"
                   />
                 </View>
-              ))}
+              ) : null}
+              {students.length > 0 ? (
+                <PressScale onPress={() => setSetupCollapsed(true)} accessibilityLabel="Hide setup">
+                  <View style={styles.doneSetupBtn}>
+                    <Text style={[styles.doneSetupText, { color: accentColor }]}>Done</Text>
+                  </View>
+                </PressScale>
+              ) : null}
             </View>
-            <Text style={styles.schemaHint}>
-              Enter A or AB in any mark field to mark a student absent. Grade, GPA and rank update automatically.
-            </Text>
-          </View>
-        ) : (
-          <Text style={styles.schemaHint}>
-            Enter the final score, or A / AB if absent. Grade, GPA and rank update automatically.
-          </Text>
+            {assessmentSchema === 'component' ? (
+              <View style={styles.componentMaxPanel}>
+                <View style={styles.componentMaxHeader}>
+                  <Text style={styles.componentMaxTitle}>Maximum marks</Text>
+                  <Text style={[styles.componentMaxTotal, { color: accentColor }]}>Total {componentTotal}</Text>
+                </View>
+                <View style={styles.componentMaxGrid}>
+                  {COMPONENT_FIELDS.map(({ field, shortLabel }) => (
+                    <View key={field} style={styles.componentMaxItem}>
+                      <Text style={styles.componentMaxLabel} numberOfLines={1}>{shortLabel}</Text>
+                      <AppTextInput
+                        style={styles.componentMaxInput}
+                        value={currentDraft.componentMaximums[field]}
+                        onChangeText={(text) => handleComponentMaximumChange(field, text)}
+                        keyboardType="numeric"
+                        maxLength={3}
+                        selectTextOnFocus
+                        accessibilityLabel={`Maximum marks for ${shortLabel}`}
+                      />
+                    </View>
+                  ))}
+                </View>
+                <Text style={styles.schemaHint}>
+                  Use the number pad for marks. Tap AB on Slip Test (or any part) if that part was missed — the other marks still count. Use Absent only if they missed the whole exam.
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.schemaHint}>
+                Type the final score, then Next. Use Absent only if they missed the whole exam.
+              </Text>
+            )}
+          </>
         )}
       </View>
     );
   };
 
   const renderStudentAssessmentCard = (student: StudentWithDetails) => {
-    const displayName = student.person.display_name ??
-      `${student.person.first_name} ${student.person.last_name}`;
     const result = studentResults[student.id];
+    if (!result) return null;
     const componentMarks = currentDraft.componentByStudent[student.id] ?? EMPTY_COMPONENT_MARKS;
     const isAbsent = assessmentSchema === 'component'
       ? isComponentAssessmentAbsent(componentMarks)
@@ -1666,149 +2189,49 @@ export default function UploadMarks() {
     const entered = assessmentSchema === 'component'
       ? isAbsent || isComponentAssessmentComplete(componentMarks)
       : (currentDraft.consolidatedByStudent[student.id] ?? '') !== '';
-    const componentResult = calculateComponentAssessment(componentMarks, componentMaximums);
 
     return (
-      <View key={student.id} style={styles.assessmentStudentCard}>
-        <View style={styles.assessmentStudentHeader}>
-          <View style={styles.studentAvatar}>
-            <StudentPhoto
-              photoUrl={student.person.photo_url}
-              displayName={displayName}
-              size={40}
-              borderRadius={12}
-              fallbackTextStyle={styles.studentAvatarText}
-            />
-          </View>
-          <View style={styles.studentInfo}>
-            <Text style={styles.studentName} numberOfLines={1}>{displayName}</Text>
-            <Text style={styles.studentRoll}>#{student.admission_no}</Text>
-          </View>
-          {entered && (
-            <View style={[styles.gradeBadge, { backgroundColor: `${accentColor}18` }]}>
-              <Text style={[styles.gradeBadgeText, { color: accentColor }]}>{isAbsent ? 'A' : result.grade}</Text>
-            </View>
-          )}
-        </View>
-
-        {assessmentSchema === 'component' ? (
-          <View style={styles.componentGrid}>
-            {COMPONENT_FIELDS.map(({ field, label, shortLabel }) => (
-              <View key={field} style={styles.componentField}>
-                <View style={styles.componentLabelRow}>
-                  <Text style={styles.componentLabel} numberOfLines={1}>{shortLabel}</Text>
-                  <Text style={styles.componentMaximum}>/{componentMaximums[field]}</Text>
-                </View>
-                <AppTextInput
-                  accessibilityLabel={`${label}, maximum ${componentMaximums[field]}`}
-                  style={[
-                    styles.componentInput,
-                    componentMarks[field] !== '' && styles.markInputFilled,
-                  ]}
-                  placeholder="0.00 / A / AB"
-                  placeholderTextColor="#9CA3AF"
-                  keyboardType="default"
-                  inputMode="text"
-                  autoCapitalize="characters"
-                  maxLength={5}
-                  value={componentMarks[field]}
-                  selectTextOnFocus
-                  accessibilityHint="Enter a whole number, a decimal with up to two places, A, or AB for absent"
-                  onChangeText={(text) => handleComponentMarkChange(student.id, field, text)}
-                />
-              </View>
-            ))}
-          </View>
-        ) : (
-          <View style={styles.consolidatedEntryRow}>
-            <View style={styles.consolidatedCopy}>
-              <Text style={styles.consolidatedLabel}>Marks Obtained</Text>
-              <Text style={styles.consolidatedHint}>
-                Maximum {currentDraft.consolidatedMaxMarks || DEFAULT_CONSOLIDATED_MAX} · decimals, A or AB
-              </Text>
-            </View>
-            <AppTextInput
-              accessibilityLabel={`Marks obtained by ${displayName}`}
-              style={[
-                styles.consolidatedInput,
-                currentDraft.consolidatedByStudent[student.id] && styles.markInputFilled,
-              ]}
-              placeholder="0.00 / A / AB"
-              placeholderTextColor="#9CA3AF"
-              keyboardType="default"
-              inputMode="text"
-              autoCapitalize="characters"
-              maxLength={6}
-              value={currentDraft.consolidatedByStudent[student.id] ?? ''}
-              selectTextOnFocus
-              accessibilityHint="Enter a whole number, a decimal with up to two places, A, or AB for absent"
-              onChangeText={(text) => handleConsolidatedMarkChange(student.id, text)}
-            />
-          </View>
-        )}
-
-        <View style={styles.metricsRow}>
-          <View style={styles.metricItem}>
-            <Text style={styles.metricLabel}>
-              {assessmentSchema === 'component' ? 'Grand total' : 'Total obtained'}
-            </Text>
-            <Text style={styles.metricValue}>
-              {entered
-                ? isAbsent
-                  ? 'A'
-                  : assessmentSchema === 'component'
-                  ? `${result.obtained}/${result.maximum}`
-                  : result.obtained
-                : '—'}
-            </Text>
-          </View>
-          {assessmentSchema === 'component' && (
-            <View style={styles.metricItem}>
-              <Text style={styles.metricLabel}>Weightage</Text>
-              <Text style={styles.metricValue}>{entered ? `${componentResult.weightage.toFixed(1)}/20` : '—'}</Text>
-            </View>
-          )}
-          {assessmentSchema === 'consolidated' && (
-            <View style={styles.metricItem}>
-              <Text style={styles.metricLabel}>Cumulative max</Text>
-              <Text style={styles.metricValue}>{entered ? result.maximum : '—'}</Text>
-            </View>
-          )}
-          <View style={styles.metricItem}>
-            <Text style={styles.metricLabel}>Overall %</Text>
-            <Text style={styles.metricValue}>{entered ? `${result.percentage.toFixed(1)}%` : '—'}</Text>
-          </View>
-          <View style={styles.metricItem}>
-            <Text style={styles.metricLabel}>
-              {assessmentSchema === 'component' ? 'GPA' : 'Average grade'}
-            </Text>
-            <Text style={styles.metricValue}>
-              {entered ? isAbsent ? 'A' : assessmentSchema === 'component' ? result.gpa.toFixed(1) : result.grade : '—'}
-            </Text>
-          </View>
-          <View style={styles.metricItem}>
-            <Text style={styles.metricLabel}>Rank</Text>
-            <Text style={styles.metricValue}>{entered ? `#${studentRanks[student.id]}` : '—'}</Text>
-          </View>
-          {rankingMethod === 'attendance_tiebreak' && (
-            <View style={styles.metricItem}>
-              <Text style={styles.metricLabel}>Attendance</Text>
-              <Text style={styles.metricValue}>
-                {attendanceByStudent[student.id] == null
-                  ? '—'
-                  : `${Number(attendanceByStudent[student.id]).toFixed(1)}%`}
-              </Text>
-            </View>
-          )}
-        </View>
-      </View>
+      <StudentAssessmentCard
+        key={student.id}
+        student={student}
+        assessmentSchema={assessmentSchema}
+        componentMarks={componentMarks}
+        consolidatedValue={currentDraft.consolidatedByStudent[student.id] ?? ''}
+        consolidatedMax={currentDraft.consolidatedMaxMarks}
+        componentMaximums={componentMaximums}
+        result={result}
+        rank={studentRanks[student.id]}
+        attendance={attendanceByStudent[student.id]}
+        rankingMethod={rankingMethod}
+        entered={entered}
+        isAbsent={isAbsent}
+        accent={accentColor}
+        isDark={isDark}
+        styles={styles}
+        onComponentMarkChange={handleComponentMarkChange}
+        onConsolidatedMarkChange={handleConsolidatedMarkChange}
+        onToggleAbsent={handleToggleAbsent}
+        onFocusField={focusField}
+        onSubmitField={submitField}
+        registerInput={registerInput}
+      />
     );
   };
 
   const uploadLabel = filledCount === 0
     ? 'Upload results'
-    : `Upload ${filledCount} ${filledCount === 1 ? 'result' : 'results'}`;
+    : `Upload ${filledCount}`;
   const canUpload = !dataLoading && !uploading && !!selectedAssignment && filledCount > 0;
+  const rosterChips: { key: RosterFilter; label: string }[] = [
+    { key: 'all', label: `All ${students.length}` },
+    { key: 'remaining', label: `Left ${remainingCount}` },
+    { key: 'entered', label: `Done ${filledCount}` },
+    { key: 'absent', label: `Absent ${absentCount}` },
+  ];
+  const focusedStudent = students.find((student) => student.id === focusedStudentId);
+  const focusedName = focusedStudent
+    ? (focusedStudent.person.display_name ?? `${focusedStudent.person.first_name} ${focusedStudent.person.last_name}`)
+    : null;
 
   const renderUploadForm = () =>
     <>
@@ -1816,7 +2239,7 @@ export default function UploadMarks() {
         variant="scroll"
         contentContainerStyle={styles.uploadScroll}
         showsVerticalScrollIndicator={false}
-        bottomOffset={120}>
+        bottomOffset={keyboardVisible ? 88 : 136}>
 
         <Animated.View entering={reduceMotion ? undefined : FadeInDown.duration(260)} style={styles.workspace}>
           <LinearGradient
@@ -1832,11 +2255,6 @@ export default function UploadMarks() {
               </View>
             </PressScale>
             <Text style={styles.toolbarContext} numberOfLines={1}>{contextLabel}</Text>
-            <View style={styles.toolbarMeta}>
-              <Text style={styles.toolbarCount}>
-                {filledCount}/{students.length || 0}
-              </Text>
-            </View>
           </View>
 
           {renderFilterSection()}
@@ -1848,7 +2266,7 @@ export default function UploadMarks() {
                 <Text style={styles.studentsSubtitle}>
                   {students.length === 0
                     ? 'Students appear once a class is selected'
-                    : `${filledCount} of ${students.length} entered`}
+                    : `${remainingCount} left · ${filledCount} ready to upload`}
                 </Text>
               </View>
               {dataLoading && students.length > 0 ? (
@@ -1865,11 +2283,74 @@ export default function UploadMarks() {
               )}
             </View>
 
+            {students.length > 0 ? (
+              <>
+                <View style={styles.searchRow}>
+                  <Ionicons name="search" size={16} color={theme.colors.textSecondary} />
+                  <AppTextInput
+                    style={themeInputStyles.inputInChrome}
+                    value={studentQuery}
+                    onChangeText={setStudentQuery}
+                    placeholder="Jump to name or roll"
+                    placeholderTextColor={theme.colors.textTertiary}
+                    returnKeyType="search"
+                    accessibilityLabel="Search students"
+                  />
+                  {studentQuery.length > 0 ? (
+                    <PressScale onPress={() => setStudentQuery('')} accessibilityLabel="Clear search">
+                      <Ionicons name="close-circle" size={18} color={theme.colors.textTertiary} />
+                    </PressScale>
+                  ) : null}
+                </View>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.rosterChipRow}
+                >
+                  {rosterChips.map((chip) => {
+                    const active = rosterFilter === chip.key;
+                    return (
+                      <PressScale
+                        key={chip.key}
+                        onPress={() => setRosterFilter(chip.key)}
+                        accessibilityLabel={chip.label}
+                      >
+                        <View style={[styles.rosterChip, active && { backgroundColor: accentColor }]}>
+                          <Text style={[styles.rosterChipText, active && styles.rosterChipTextActive]}>
+                            {chip.label}
+                          </Text>
+                        </View>
+                      </PressScale>
+                    );
+                  })}
+                </ScrollView>
+              </>
+            ) : null}
+
             {studentsLoading ? (
               <StudentsSkeleton />
-            ) : students.length > 0 ? (
+            ) : visibleStudents.length > 0 ? (
               <View style={styles.studentGrid}>
-                {students.map(renderStudentAssessmentCard)}
+                {visibleStudents.map(renderStudentAssessmentCard)}
+              </View>
+            ) : students.length > 0 ? (
+              <View style={styles.emptyStudents}>
+                <View style={styles.emptyIcon}>
+                  <Ionicons name="filter-outline" size={28} color={accentColor} />
+                </View>
+                <Text style={styles.emptyStudentsText}>
+                  {studentQuery ? `No match for “${studentQuery}”` : 'Nothing in this filter'}
+                </Text>
+                <Text style={styles.emptyStudentsSubtext}>
+                  {rosterFilter === 'remaining'
+                    ? 'Every student in this exam already has marks.'
+                    : 'Try All, or search by name or admission number.'}
+                </Text>
+                <PressScale onPress={() => { setRosterFilter('all'); setStudentQuery(''); }}>
+                  <View style={[styles.emptyAction, { backgroundColor: accentColor }]}>
+                    <Text style={styles.emptyActionText}>Show all students</Text>
+                  </View>
+                </PressScale>
               </View>
             ) : (
               <View style={styles.emptyStudents}>
@@ -1888,18 +2369,48 @@ export default function UploadMarks() {
         </Animated.View>
       </KeyboardAwareScreen>
 
-      {!keyboardVisible || Platform.OS === 'web' ? (
+      {keyboardVisible && Platform.OS !== 'web' ? (
+        <KeyboardStickyView>
+          <View style={[styles.keyboardAccessory, isDark && styles.keyboardAccessoryDark]}>
+            <PressScale
+              disabled={!focusedStudentId}
+              onPress={() => focusedStudentId && handleToggleAbsent(focusedStudentId)}
+              accessibilityLabel="Mark focused student absent"
+            >
+              <View style={styles.accessoryGhost}>
+                <Text style={styles.accessoryGhostText}>Absent</Text>
+              </View>
+            </PressScale>
+            <Text style={styles.accessoryMeta} numberOfLines={1}>
+              {focusedName ?? `${filledCount}/${students.length}`}
+            </Text>
+            <PressScale onPress={focusNextStudent} accessibilityLabel="Next student">
+              <View style={[styles.accessoryNext, { backgroundColor: accentColor }]}>
+                <Text style={styles.accessoryNextText}>Next</Text>
+                <Ionicons name="arrow-forward" size={14} color="#FFFFFF" />
+              </View>
+            </PressScale>
+          </View>
+        </KeyboardStickyView>
+      ) : (
         <Animated.View
           entering={reduceMotion ? undefined : FadeInDown.duration(220)}
           exiting={reduceMotion ? undefined : FadeOutDown.duration(160)}
           style={styles.ctaDockWrap}
           pointerEvents="box-none"
         >
-          <View style={styles.ctaDock}>
+          <View style={[styles.ctaDock, isDark && styles.ctaDockDark]}>
+            <LinearGradient
+              colors={['rgba(255,255,255,0.22)', 'rgba(255,255,255,0.04)']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={StyleSheet.absoluteFill}
+              pointerEvents="none"
+            />
             <View style={styles.ctaProgressBlock}>
               <View style={styles.ctaProgressRow}>
                 <Text style={styles.ctaProgressLabel} numberOfLines={1}>
-                  {students.length === 0 ? 'Select a class' : `${filledCount} of ${students.length} entered`}
+                  {students.length === 0 ? 'Select a class' : `${remainingCount} left`}
                 </Text>
                 <Text style={[styles.ctaProgressPct, { color: accentColor }]}>
                   {Math.round(fillPercent * 100)}%
@@ -1909,7 +2420,7 @@ export default function UploadMarks() {
             </View>
             <View style={styles.ctaActionWrap}>
               <PressScale onPress={handleSubmit} disabled={!canUpload} accessibilityLabel={uploadLabel}>
-                <View style={[styles.ctaButton, { backgroundColor: canUpload ? theme.colors.primary : theme.colors.primaryLight, opacity: canUpload ? 1 : 0.45 }]}>
+                <View style={[styles.ctaButton, { backgroundColor: canUpload ? accentColor : theme.colors.primaryLight, opacity: canUpload ? 1 : 0.45 }]}>
                   <LinearGradient
                     colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0)']}
                     start={{ x: 0, y: 0 }}
@@ -1930,7 +2441,7 @@ export default function UploadMarks() {
             </View>
           </View>
         </Animated.View>
-      ) : null}
+      )}
     </>;
 
   // ── Main Render ───────────────────────────────────────────────────────────────
@@ -1939,12 +2450,8 @@ export default function UploadMarks() {
     <View style={styles.container}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
-      {!isPhone ? (
-        <>
-          <View style={[styles.orb1, { backgroundColor: isDark ? 'rgba(124,111,255,0.14)' : 'rgba(124,111,255,0.10)' }]} />
-          <View style={[styles.orb2, { backgroundColor: isDark ? 'rgba(59,130,246,0.10)' : 'rgba(59,130,246,0.08)' }]} />
-        </>
-      ) : null}
+      <View style={[styles.orb1, { backgroundColor: isDark ? 'rgba(124,111,255,0.14)' : 'rgba(124,111,255,0.10)' }]} pointerEvents="none" />
+      <View style={[styles.orb2, { backgroundColor: isDark ? 'rgba(59,130,246,0.10)' : 'rgba(59,130,246,0.08)' }]} pointerEvents="none" />
 
       <StaffHeader
         title={selectedCategory?.title ?? 'Upload Marks'}
@@ -1967,8 +2474,8 @@ const getStyles = (
   isPhone: boolean,
   studentColumns: number,
 ) => {
-  const pageBg = isDark ? '#0B1020' : '#F6F8FC';
-  const cardBg = isDark ? '#151D2D' : '#FFFFFF';
+  const pageBg = isDark ? clayTokens.colors.page.dark : clayTokens.colors.page.light;
+  const cardBg = isDark ? clayTokens.colors.card.dark : clayTokens.colors.raised.light;
   const dashboardCardWidth = dashboardColumns === 3 ? '32%' : dashboardColumns === 2 ? '48.6%' : '100%';
 
   return StyleSheet.create({
@@ -2021,14 +2528,16 @@ const getStyles = (
       flexDirection: 'row',
       alignItems: isPhone ? 'flex-start' : 'center',
       gap: isPhone ? 14 : 18,
-      backgroundColor: isDark ? '#151D2D' : '#FFFFFF',
-      borderRadius: isPhone ? 20 : 24,
+      backgroundColor: isDark ? clayTokens.colors.card.dark : clayTokens.colors.raised.light,
+      borderRadius: clayTokens.radii.card,
       borderWidth: 1,
-      borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#E2E8F0',
-      shadowColor: '#0F172A',
+      borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.8)',
+      borderBottomWidth: 1.5,
+      borderBottomColor: isDark ? 'rgba(0,0,0,0.35)' : 'rgba(76,90,120,0.10)',
+      shadowColor: '#6B7A99',
       shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: isDark ? 0.28 : 0.06,
-      shadowRadius: 20,
+      shadowOpacity: isDark ? 0.28 : 0.14,
+      shadowRadius: 16,
       elevation: 3,
       overflow: 'hidden',
     },
@@ -2124,15 +2633,17 @@ const getStyles = (
     card: {
       minHeight: isPhone ? 118 : 218,
       padding: isPhone ? 14 : 18,
-      backgroundColor: isDark ? '#151D2D' : '#FFFFFF',
-      borderRadius: isPhone ? 18 : 20,
+      backgroundColor: isDark ? clayTokens.colors.card.dark : clayTokens.colors.card.light,
+      borderRadius: clayTokens.radii.card,
       borderWidth: 1,
-      borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#E2E8F0',
-      shadowColor: '#0F172A',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: isDark ? 0.24 : 0.045,
-      shadowRadius: 12,
-      elevation: 2,
+      borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.75)',
+      borderBottomWidth: 1.5,
+      borderBottomColor: isDark ? 'rgba(0,0,0,0.28)' : 'rgba(76,90,120,0.10)',
+      shadowColor: '#6B7A99',
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: isDark ? 0.24 : 0.12,
+      shadowRadius: 14,
+      elevation: 3,
       overflow: 'hidden',
     },
     cardAccent: {
@@ -2255,14 +2766,16 @@ const getStyles = (
     },
     workspace: {
       backgroundColor: cardBg,
-      borderRadius: isPhone ? 20 : 24,
+      borderRadius: clayTokens.radii.card,
       borderWidth: 1,
-      borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#E2E8F0',
-      shadowColor: '#0F172A',
-      shadowOffset: { width: 0, height: 6 },
-      shadowOpacity: isDark ? 0.28 : 0.06,
-      shadowRadius: 18,
-      elevation: 3,
+      borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.8)',
+      borderBottomWidth: 1.5,
+      borderBottomColor: isDark ? 'rgba(0,0,0,0.32)' : 'rgba(76,90,120,0.10)',
+      shadowColor: '#6B7A99',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: isDark ? 0.28 : 0.14,
+      shadowRadius: 16,
+      elevation: 4,
       overflow: 'hidden',
       paddingBottom: 12,
     },
@@ -2280,8 +2793,8 @@ const getStyles = (
       gap: 6,
       minHeight: 40,
       paddingHorizontal: 12,
-      borderRadius: 14,
-      backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.7)',
+      borderRadius: clayTokens.radii.button,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : clayTokens.colors.inset.light,
       borderWidth: 1,
       borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(148,163,184,0.18)',
     },
@@ -2348,11 +2861,88 @@ const getStyles = (
       lineHeight: 17,
       paddingHorizontal: 2,
     },
+    setupSummary: {
+      minHeight: 44,
+      paddingHorizontal: 12,
+      borderRadius: 14,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 10,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : clayTokens.colors.inset.light,
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(148,163,184,0.16)',
+    },
+    setupSummaryCopy: {
+      flex: 1,
+      minWidth: 0,
+      gap: 2,
+    },
+    setupSummaryLabel: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.colors.text,
+    },
+    setupSummaryTotal: {
+      fontSize: 11,
+      fontWeight: '800',
+    },
+    setupSummaryAction: {
+      fontSize: 13,
+      fontWeight: '800',
+    },
+    doneSetupBtn: {
+      minHeight: 40,
+      paddingHorizontal: 12,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : clayTokens.colors.inset.light,
+    },
+    doneSetupText: {
+      fontSize: 13,
+      fontWeight: '800',
+    },
+    searchRow: {
+      marginHorizontal: 12,
+      marginBottom: 10,
+      minHeight: 46,
+      paddingHorizontal: 12,
+      borderRadius: clayTokens.radii.input,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : clayTokens.colors.inset.light,
+      borderWidth: 1.5,
+      borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(76,90,120,0.12)',
+    },
+    rosterChipRow: {
+      paddingHorizontal: 12,
+      paddingBottom: 10,
+      gap: 8,
+    },
+    rosterChip: {
+      height: 34,
+      paddingHorizontal: 12,
+      borderRadius: clayTokens.radii.chip,
+      justifyContent: 'center',
+      backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(79,110,247,0.08)',
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(79,110,247,0.18)',
+    },
+    rosterChipText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.colors.text,
+    },
+    rosterChipTextActive: {
+      color: '#FFFFFF',
+    },
     componentMaxPanel: {
       gap: 10,
       padding: 12,
-      borderRadius: 16,
-      backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.55)',
+      borderRadius: clayTokens.radii.button,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : clayTokens.colors.inset.light,
       borderWidth: 1,
       borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(148,163,184,0.16)',
     },
@@ -2558,10 +3148,16 @@ const getStyles = (
     assessmentStudentCard: {
       width: studentColumns === 2 ? '49.35%' : '100%',
       padding: isPhone ? 12 : 14,
-      borderRadius: 18,
+      borderRadius: clayTokens.radii.card,
       borderWidth: 1,
-      borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(148,163,184,0.16)',
-      backgroundColor: isDark ? 'rgba(255,255,255,0.025)' : '#FAFBFD',
+      borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(76,90,120,0.10)',
+      backgroundColor: isDark ? 'rgba(255,255,255,0.025)' : clayTokens.colors.card.light,
+      borderBottomWidth: 1.5,
+      borderBottomColor: isDark ? 'rgba(0,0,0,0.28)' : 'rgba(76,90,120,0.10)',
+    },
+    assessmentStudentCardAbsent: {
+      backgroundColor: isDark ? 'rgba(210,65,81,0.10)' : clayTokens.colors.brand.roseSoft,
+      borderColor: isDark ? 'rgba(210,65,81,0.28)' : 'rgba(210,65,81,0.18)',
     },
     assessmentStudentHeader: {
       flexDirection: 'row',
@@ -2570,16 +3166,89 @@ const getStyles = (
       marginBottom: 12,
     },
     gradeBadge: {
-      minWidth: 46,
-      height: 36,
-      paddingHorizontal: 10,
+      minWidth: 42,
+      height: 34,
+      paddingHorizontal: 8,
       borderRadius: 12,
       alignItems: 'center',
       justifyContent: 'center',
     },
     gradeBadgeText: {
-      fontSize: 15,
-      fontWeight: '900',
+      fontSize: 14,
+      fontWeight: '800',
+      letterSpacing: -0.3,
+    },
+    absentChip: {
+      minHeight: 34,
+      paddingHorizontal: 10,
+      borderRadius: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: isDark ? 'rgba(210,65,81,0.12)' : clayTokens.colors.brand.roseSoft,
+    },
+    absentChipActive: {
+      backgroundColor: clayTokens.colors.absent.bg,
+    },
+    absentChipText: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: clayTokens.colors.absent.bg,
+    },
+    absentChipTextActive: {
+      color: '#FFFFFF',
+    },
+    absentHint: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: clayTokens.colors.absent.bg,
+      paddingHorizontal: 2,
+      marginBottom: 2,
+    },
+    pendingHint: {
+      marginTop: 10,
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.colors.textTertiary,
+      paddingHorizontal: 2,
+    },
+    liveTotalsRow: {
+      marginTop: 12,
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 2,
+    },
+    liveTotalStrong: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: theme.colors.text,
+      letterSpacing: -0.2,
+    },
+    liveTotalMuted: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.colors.textSecondary,
+    },
+    liveDot: {
+      width: 3,
+      height: 3,
+      borderRadius: 2,
+      backgroundColor: 'rgba(76,90,120,0.28)',
+    },
+    emptyAction: {
+      marginTop: 8,
+      minHeight: 44,
+      paddingHorizontal: 16,
+      borderRadius: clayTokens.radii.button,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    emptyActionText: {
+      color: '#FFFFFF',
+      fontSize: 14,
+      fontWeight: '700',
     },
     componentGrid: {
       flexDirection: 'row',
@@ -2731,15 +3400,64 @@ const getStyles = (
       gap: isPhone ? 12 : 10,
       flexDirection: isPhone ? 'row' : 'column',
       alignItems: isPhone ? 'center' : 'stretch',
-      backgroundColor: cardBg,
+      backgroundColor: isDark ? 'rgba(21,29,45,0.92)' : 'rgba(255,255,255,0.72)',
       borderRadius: 22,
-      borderWidth: 1,
-      borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.8)',
-      shadowColor: '#0F172A',
+      borderWidth: 1.5,
+      borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.85)',
+      overflow: 'hidden',
+      shadowColor: '#6B7A99',
       shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: isDark ? 0.32 : 0.12,
-      shadowRadius: 18,
-      elevation: 8,
+      shadowOpacity: isDark ? 0.32 : 0.16,
+      shadowRadius: 16,
+      elevation: 6,
+    },
+    ctaDockDark: {
+      backgroundColor: 'rgba(21,29,45,0.94)',
+    },
+    keyboardAccessory: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      backgroundColor: 'rgba(244,247,253,0.96)',
+      borderTopWidth: StyleSheet.hairlineWidth * 2,
+      borderTopColor: 'rgba(255,255,255,0.8)',
+    },
+    keyboardAccessoryDark: {
+      backgroundColor: 'rgba(21,29,45,0.96)',
+      borderTopColor: 'rgba(255,255,255,0.08)',
+    },
+    accessoryGhost: {
+      minHeight: 40,
+      paddingHorizontal: 12,
+      borderRadius: 12,
+      justifyContent: 'center',
+      backgroundColor: clayTokens.colors.brand.roseSoft,
+    },
+    accessoryGhostText: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: clayTokens.colors.absent.bg,
+    },
+    accessoryMeta: {
+      flex: 1,
+      fontSize: 13,
+      fontWeight: '700',
+      color: theme.colors.textSecondary,
+    },
+    accessoryNext: {
+      minHeight: 40,
+      paddingHorizontal: 14,
+      borderRadius: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    accessoryNextText: {
+      color: '#FFFFFF',
+      fontSize: 13,
+      fontWeight: '800',
     },
     ctaProgressBlock: {
       flex: isPhone ? 1 : undefined,

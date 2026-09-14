@@ -337,10 +337,10 @@ export interface ResultEntry {
     marks: number | null;
     is_absent?: boolean;
     max_marks?: number;
-    participation_marks?: number;
-    written_work_marks?: number;
-    project_work_marks?: number;
-    slip_test_marks?: number;
+    participation_marks?: number | null;
+    written_work_marks?: number | null;
+    project_work_marks?: number | null;
+    slip_test_marks?: number | null;
 }
 
 export interface ExamResultUpload {

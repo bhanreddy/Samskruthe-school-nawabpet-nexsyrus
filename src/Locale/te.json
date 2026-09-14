@@ -3,6 +3,24 @@
   "languageToggle": "తె",
   "languageEnglish": "EN",
   "languageTelugu": "తె",
+  "school_daily": {
+    "title": "స్కూల్‌IMS డైలీ",
+    "good_morning": "శుభోదయం",
+    "todays_thought": "నేటి ఆలోచన",
+    "todays_news": "నేటి వార్తలు",
+    "saved_stories": "సేవ్ చేసిన కథనాలు",
+    "open_edition": "ఎడిషన్ తెరవండి",
+    "no_thought": "ఈరోజు ఆలోచన ప్రచురించబడలేదు.",
+    "no_news": "ఈరోజు వార్తలు ప్రచురించబడలేదు.",
+    "no_saved": "సేవ్ చేసిన కథనాలు లేవు.",
+    "offline_edition": "ఆఫ్‌లైన్ ఎడిషన్",
+    "todays_edition": "నేటి ఎడిషన్",
+    "todays_stories": "నేటి కథనాలు",
+    "todays_kicker": "నేటి ఆలోచన • నేటి వార్తలు",
+    "empty_thought_help": "మీ పాఠశాల ప్రచురించినప్పుడు నేటి ఆలోచన ఇక్కడ కనిపిస్తుంది.",
+    "empty_news_help": "కొంతసేపటి తర్వాత చూడండి లేదా పైన ఉన్న ఇతర అంశాలను చూడండి.",
+    "empty_edition": "నేటి ఎడిషన్ సిద్ధమవుతోంది."
+  },
   "header": {
     "english": "ఇంగ్లీష్",
     "telugu": "తెలుగు"

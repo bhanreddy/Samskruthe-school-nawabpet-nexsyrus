@@ -242,7 +242,7 @@ export function buildAdminSearchIndex(t: TFunction): AdminSearchEntry[] {
     route: item.route,
     icon: item.icon,
     category: item.category,
-    keywords: [item.category, item.tier, item.title],
+    keywords: [item.category, item.tier, item.title, ...(item.route === '/admin/content' ? ['thought', 'news', 'daily', 'editorial', 'schoolims daily'] : [])],
     kind: 'page' as const,
     permission: item.permission,
   }));

@@ -24,6 +24,11 @@ beforeEach(() => {
   (staffBiometricService.signDeviceSession as jest.Mock).mockResolvedValue('proof-signature');
   fetchMock.mockResolvedValue(response(200, { success: true, school_id: 12, data: { success: true } }));
 });
+it('strips a redundant /api/v1 prefix so daily content is not requested twice', async () => {
+  await api.get('/api/v1/content/daily', undefined, { silent: true });
+  const [url] = fetchMock.mock.calls[0];
+  expect(url).toBe('https://pilot.invalid/api/v1/content/daily?school_id=12');
+});
 it('uses single-line key headers and signs the backend-normalized method/path', async () => {
   await api.post('/attendance/v2/challenge', { action: 'check_in' });
   const [url, options] = fetchMock.mock.calls[0];
