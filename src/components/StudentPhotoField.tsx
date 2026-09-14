@@ -79,7 +79,13 @@ export default function StudentPhotoField({
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[
+      styles.studio,
+      {
+        backgroundColor: isDark ? 'rgba(255,255,255,0.035)' : 'rgba(102,89,144,0.045)',
+        borderColor: hasPhoto ? `${accentColor}40` : (isDark ? 'rgba(124,111,255,0.16)' : 'rgba(102,89,144,0.12)'),
+      },
+    ]}>
       <TouchableOpacity
         activeOpacity={0.84}
         onPress={openPicker}
@@ -87,33 +93,38 @@ export default function StudentPhotoField({
         accessibilityLabel={hasPhoto ? 'Change student profile picture' : 'Add student profile picture'}
         style={styles.avatarButton}
       >
-        <Avatar
-          photoUrl={displayedPhoto}
-          name={studentName || 'New Student'}
-          size={96}
-          borderRadius={30}
-          ringColor={isDark ? 'rgba(255,255,255,0.18)' : '#FFFFFF'}
-          ringWidth={3}
-        />
+        <View style={[
+          styles.photoFrame,
+          hasPhoto
+            ? { borderColor: accentColor, borderStyle: 'solid' }
+            : { borderColor: isDark ? 'rgba(168,158,196,0.35)' : 'rgba(102,89,144,0.28)', borderStyle: 'dashed' },
+        ]}>
+          <Avatar
+            photoUrl={displayedPhoto}
+            name={studentName || 'New Student'}
+            size={88}
+            borderRadius={28}
+          />
+        </View>
         <View style={[styles.cameraBadge, { backgroundColor: accentColor }]}>
-          <Ionicons name="camera" size={18} color="#FFFFFF" />
+          <Ionicons name="camera" size={15} color="#FFFFFF" />
         </View>
       </TouchableOpacity>
 
       <View style={styles.copy}>
         <Text style={[styles.title, { color: isDark ? '#EDE8F5' : '#2D2640' }]}>
-          Profile Picture
+          Profile picture
         </Text>
-        <Text style={[styles.help, { color: isDark ? '#A89EC4' : '#6B6280' }]}> 
-          Optional. Any selected photo is converted to JPEG and reduced to 100 KB or less before storage.
+        <Text style={[styles.help, { color: isDark ? '#A89EC4' : '#6B6280' }]}>
+          Optional. Converted to JPEG and kept under 100 KB.
         </Text>
         <View style={styles.actions}>
           <TouchableOpacity
             activeOpacity={0.76}
             onPress={openPicker}
-            style={[styles.actionButton, { borderColor: accentColor }]}
+            style={[styles.actionButton, { backgroundColor: `${accentColor}14`, borderColor: `${accentColor}40` }]}
           >
-            <Ionicons name={hasPhoto ? 'images-outline' : 'add-circle-outline'} size={16} color={accentColor} />
+            <Ionicons name={hasPhoto ? 'images-outline' : 'add-circle-outline'} size={15} color={accentColor} />
             <Text style={[styles.actionText, { color: accentColor }]}>
               {hasPhoto ? 'Change photo' : 'Add photo'}
             </Text>
@@ -124,7 +135,7 @@ export default function StudentPhotoField({
               onPress={() => onChange(null)}
               style={[styles.actionButton, styles.removeButton]}
             >
-              <Ionicons name="trash-outline" size={16} color="#DC2626" />
+              <Ionicons name="trash-outline" size={15} color="#DC2626" />
               <Text style={[styles.actionText, styles.removeText]}>Remove</Text>
             </TouchableOpacity>
           )}
@@ -135,22 +146,30 @@ export default function StudentPhotoField({
 }
 
 const styles = StyleSheet.create({
-  container: {
+  studio: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 18,
+    gap: 16,
     marginBottom: 18,
+    borderWidth: 1,
+    borderRadius: 20,
+    padding: 14,
   },
   avatarButton: {
     position: 'relative',
   },
+  photoFrame: {
+    padding: 3,
+    borderRadius: 32,
+    borderWidth: 1.5,
+  },
   cameraBadge: {
     position: 'absolute',
-    right: -4,
-    bottom: -4,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    right: -2,
+    bottom: -2,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 3,
@@ -162,11 +181,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 15,
     fontWeight: '800',
+    letterSpacing: -0.2,
   },
   help: {
     fontSize: 12,
     lineHeight: 17,
     marginTop: 4,
+    fontWeight: '500',
   },
   actions: {
     flexDirection: 'row',
@@ -176,15 +197,16 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     minHeight: 34,
-    paddingHorizontal: 11,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    borderRadius: 999,
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
   removeButton: {
-    borderColor: 'rgba(220,38,38,0.35)',
+    borderColor: 'rgba(220,38,38,0.28)',
+    backgroundColor: 'rgba(220,38,38,0.06)',
   },
   actionText: {
     fontSize: 12,

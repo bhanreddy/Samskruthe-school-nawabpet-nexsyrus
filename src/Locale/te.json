@@ -513,7 +513,17 @@
     "receipts": "రసీదులు",
     "addStaff": "స్టాఫ్ ని యాడ్ చేయండి",
     "addStudent": "స్టూడెంట్ ని యాడ్ చేయండి",
-    "addAdmin": "అడ్మిన్ ని యాడ్ చేయండి"
+    "addAdmin": "అడ్మిన్ ని యాడ్ చేయండి",
+    "hi_name": "హాయ్, {{name}}",
+    "hero_welcome": "ప్రతి రూపాయికి ఒక స్థానం",
+    "open_dues_bar": "{{amount}} బాకీ ఉంది",
+    "collected_today_bar": "ఈరోజు {{amount}} కలెక్ట్ అయింది",
+    "updates_for_you": "మీకు {{count}} అప్డేట్",
+    "updates_for_you_plural": "మీకు {{count}} అప్డేట్లు",
+    "desk_clear": "డెస్క్ క్లియర్",
+    "review": "రివ్యూ",
+    "view": "చూడండి",
+    "collect": "కలెక్ట్"
   },
   "staff_dashboard": {
     "title": "స్టాఫ్ పోర్టల్",

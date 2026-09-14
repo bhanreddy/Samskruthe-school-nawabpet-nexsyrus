@@ -89,7 +89,7 @@ const CATEGORY_THEME: Record<string, CategoryTheme> = {
     iconWash: '#E0E7FF',
     iconWashDark: 'rgba(129,140,248,0.22)',
     stripe: '#6366F1',
-    unit: 'students',
+    unit: 'requests',
   },
   transport: {
     icon: 'bus-outline',
@@ -199,7 +199,7 @@ function categoryLabel(category: string): string {
   const labels: Record<string, string> = {
     attendance: 'Attendance',
     finance: 'Fee recovery',
-    governance: 'Admissions',
+    governance: 'Governance',
     transport: 'Transport',
     academics: 'Academics',
     staff: 'Staff',
@@ -217,7 +217,7 @@ function briefingBit(item: ActionCenterItem): string {
     case 'finance':
       return item.amount ? `${formatInrCompact(item.amount)} overdue` : `${n} fee defaulters`;
     case 'governance':
-      return `${n} missing documents`;
+      return `${n} pending approval${n === 1 ? '' : 's'}`;
     case 'transport':
       return `${n} transport alert${n === 1 ? '' : 's'}`;
     case 'staff':
@@ -288,7 +288,28 @@ export function PrincipalActionCenter() {
     let mounted = true;
     GovernanceService.getActionCenterData()
       .then((res) => {
-        if (mounted) setData(res);
+        if (mounted && res) {
+          const filterItem = (i: ActionCenterItem) => i.id !== 'missing_admission_docs';
+          const critical = res.sections?.critical?.filter(filterItem) || [];
+          const needs_attention = res.sections?.needs_attention?.filter(filterItem) || [];
+          const informational =
+            res.sections?.informational?.filter((i) => i.id !== 'admission_docs_compliant') || [];
+          setData({
+            ...res,
+            summary: {
+              ...res.summary,
+              critical_count: critical.length,
+              needs_attention_count: needs_attention.length,
+              informational_count: informational.length,
+              all_clear: critical.length === 0 && needs_attention.length === 0,
+            },
+            sections: {
+              critical,
+              needs_attention,
+              informational,
+            },
+          });
+        }
       })
       .catch((err) => {
         console.warn('Failed to load Principal Action Center data', err);
@@ -304,7 +325,9 @@ export function PrincipalActionCenter() {
 
   const queue = useMemo(() => {
     if (!data) return [] as ActionCenterItem[];
-    return [...data.sections.critical, ...data.sections.needs_attention];
+    return [...data.sections.critical, ...data.sections.needs_attention].filter(
+      (item) => item.id !== 'missing_admission_docs'
+    );
   }, [data]);
 
   const briefing = useMemo(() => {

@@ -25,7 +25,7 @@ import StaffHeader from '../../src/components/StaffHeader';
 import SwipeableStudentCard from '../../src/components/SwipeableStudentCard';
 import { staffTabBarReserve } from '../../src/components/StaffFooter';
 import { useAuth } from '../../src/hooks/useAuth';
-import { AttendanceService, currentSession, localAttendanceDate } from '../../src/services/attendanceService';
+import { AttendanceService, currentSession, localAttendanceDate, MarkAttendanceRequest } from '../../src/services/attendanceService';
 import { AttendanceStatus, AttendanceSession } from '../../src/types/schema';
 import { useTheme } from '../../src/hooks/useTheme';
 import type { SchoolTheme } from '../../src/theme/types';
@@ -33,6 +33,9 @@ import LogoLoader from '../../src/components/LogoLoader';
 import ViewAsBanner from '../../src/components/ViewAsBanner';
 import { useEffectiveStaffId } from '../../src/hooks/useEffectiveStaffId';
 import AppDatePicker, { parseYMD } from '../../src/components/AppDatePicker';
+import AbsenceInsightBottomSheet, { InsightStudentData } from '../../src/components/attendance/AbsenceInsightBottomSheet';
+import { persistentQueryCache } from '../../src/services/persistentQueryCache';
+import { attendanceOfflineQueue } from '../../src/services/attendanceOfflineQueue';
 
 // Enable LayoutAnimation for Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -49,6 +52,14 @@ interface StudentUI {
   photoUrl: string | null;
   morningStatus: SessionStatus;
   afternoonStatus: SessionStatus;
+  consecutiveAbsenceDays?: number;
+  absenceStreakStartDate?: string | null;
+  absenceStreakEndDate?: string | null;
+  absenceStreakDates?: Array<{ date: string; status: string }>;
+  monthlyAttendancePercentage?: number | null;
+  absenceRiskLevel?: string | null;
+  isIrregular?: boolean;
+  monthlyAbsentCount?: number;
 }
 
 const toSessionStatus = (raw: string | null | undefined): SessionStatus =>
@@ -221,6 +232,10 @@ export default function ManageStudents() {
   const [detectedClassLabel, setDetectedClassLabel] = useState<string | null>(null);
   const [session, setSession] = useState<AttendanceSession>(requestedSession || currentSession());
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [filterChronicAbsent, setFilterChronicAbsent] = useState(false);
+  const [selectedInsightStudent, setSelectedInsightStudent] = useState<InsightStudentData | null>(null);
+  const [isOfflineCached, setIsOfflineCached] = useState(false);
+
   // Defaults to today — same as production. Past dates are opt-in via the picker.
   const todayYMD = useMemo(() => localAttendanceDate(), []);
   const [selectedDate, setSelectedDate] = useState(() => {
@@ -256,30 +271,96 @@ export default function ManageStudents() {
   const completionPct = total > 0 ? Math.round((marked / total) * 100) : 0;
   const canSubmit = total > 0 && marked > 0;
 
+  const chronicAbsentStudents = useMemo(
+    () => students.filter((s) => (s.consecutiveAbsenceDays || 0) >= 3),
+    [students]
+  );
+  const chronicAbsentCount = chronicAbsentStudents.length;
+
+  const toggleChronicFilter = useCallback(() => {
+    triggerHaptic('light');
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setFilterChronicAbsent((prev) => !prev);
+  }, []);
+
   const otherSessionMarked = students.filter((s) =>
     (session === 'morning' ? s.afternoonStatus : s.morningStatus) !== 'unmarked'
   ).length;
 
   const filteredStudents = useMemo(() => {
-    const base = !searchQuery.trim()
-      ? students
-      : students.filter((s) => {
-          const lowerQ = searchQuery.toLowerCase();
-          return s.name.toLowerCase().includes(lowerQ) || s.rollNo.toLowerCase().includes(lowerQ);
-        });
+    let base = students;
+    if (filterChronicAbsent) {
+      base = base.filter((s) => (s.consecutiveAbsenceDays || 0) >= 3);
+    }
+    if (searchQuery.trim()) {
+      const lowerQ = searchQuery.toLowerCase();
+      base = base.filter((s) => {
+        return s.name.toLowerCase().includes(lowerQ) || s.rollNo.toLowerCase().includes(lowerQ);
+      });
+    }
     return [...base].sort(sortByRollNo);
-  }, [students, searchQuery]);
+  }, [students, searchQuery, filterChronicAbsent]);
+
+  const cacheKey = `${selectedDate}_${session}_${staffId || 'self'}`;
+  const effectiveUserId = staffId || user?.id || 'staff';
 
   const loadStudents = useCallback(async () => {
     if (!user) return;
     setLoadError(null);
-    setLoading(true);
+
+    // 1. Instant render from disk cache
     try {
+      const cached = await persistentQueryCache.read<{
+        class_section_id: string;
+        class_name: string;
+        section_name: string;
+        students: any[];
+      }>(effectiveUserId, 'my_class', cacheKey);
+
+      if (cached?.data) {
+        setDetectedClassId(cached.data.class_section_id);
+        setDetectedClassLabel(
+          [cached.data.class_name, cached.data.section_name].filter(Boolean).join(' - ') || null
+        );
+        const formatted = (cached.data.students || [])
+          .map((s) => ({
+            id: s.student_id,
+            enrollmentId: s.enrollment_id,
+            name: s.student_name,
+            rollNo: s.roll_number != null ? String(s.roll_number) : (s.admission_no ?? '—'),
+            photoUrl: s.photo_url ?? null,
+            morningStatus: toSessionStatus(s.morning_status),
+            afternoonStatus: toSessionStatus(s.afternoon_status),
+            consecutiveAbsenceDays: s.consecutive_absence_days ?? 0,
+            absenceStreakStartDate: s.absence_streak_start_date ?? null,
+            absenceStreakEndDate: s.absence_streak_end_date ?? null,
+            absenceStreakDates: s.absence_streak_dates ?? [],
+            monthlyAttendancePercentage: s.monthly_attendance_percentage ?? null,
+            absenceRiskLevel: s.absence_risk_level ?? null,
+            isIrregular: Boolean(s.is_irregular),
+            monthlyAbsentCount: s.monthly_absent_count ?? 0,
+          }))
+          .sort(sortByRollNo);
+        setStudents(formatted);
+        setLoading(false);
+        setIsOfflineCached(true);
+      } else {
+        setLoading(true);
+      }
+    } catch {
+      setLoading(true);
+    }
+
+    // 2. Fetch fresh data from network & flush offline queue
+    try {
+      attendanceOfflineQueue.flush(effectiveUserId).catch(() => {});
+
       const myClass = await AttendanceService.getMyClass(selectedDate, staffId, session);
       if (!myClass) {
         setStudents([]);
         setDetectedClassId(null);
         setDetectedClassLabel(null);
+        setIsOfflineCached(false);
         return;
       }
       setDetectedClassId(myClass.class_section_id);
@@ -294,19 +375,34 @@ export default function ManageStudents() {
           photoUrl: s.photo_url ?? null,
           morningStatus: toSessionStatus(s.morning_status),
           afternoonStatus: toSessionStatus(s.afternoon_status),
+          consecutiveAbsenceDays: s.consecutive_absence_days ?? 0,
+          absenceStreakStartDate: s.absence_streak_start_date ?? null,
+          absenceStreakEndDate: s.absence_streak_end_date ?? null,
+          absenceStreakDates: s.absence_streak_dates ?? [],
+          monthlyAttendancePercentage: s.monthly_attendance_percentage ?? null,
+          absenceRiskLevel: s.absence_risk_level ?? null,
+          isIrregular: Boolean(s.is_irregular),
+          monthlyAbsentCount: s.monthly_absent_count ?? 0,
         }))
         .sort(sortByRollNo);
       setStudents(formatted);
+      setIsOfflineCached(false);
+      persistentQueryCache.write(effectiveUserId, 'my_class', myClass, Date.now(), cacheKey);
     } catch (err) {
-      console.error('Failed to load class students:', err);
-      setStudents([]);
-      setDetectedClassId(null);
-      setDetectedClassLabel(null);
-      setLoadError('Could not reach the server. Make sure the backend is running, then pull to refresh.');
+      console.warn('Failed to load fresh class students:', err);
+      // If we don't already have cached data, show error state
+      setStudents((prev) => {
+        if (prev.length === 0) {
+          setDetectedClassId(null);
+          setDetectedClassLabel(null);
+          setLoadError('Could not reach the server. Make sure the backend is running, then pull to refresh.');
+        }
+        return prev;
+      });
     } finally {
       setLoading(false);
     }
-  }, [user, staffId, session, selectedDate]);
+  }, [user, staffId, session, selectedDate, cacheKey, effectiveUserId]);
 
   const handleDateChange = useCallback((next: string) => {
     if (!next || next === selectedDate) return;
@@ -352,17 +448,24 @@ export default function ManageStudents() {
       alertCompat('Nothing to submit', 'Mark at least one student present or absent.');
       return;
     }
+    if (!detectedClassId) {
+      alertCompat('Error', 'No class assigned.');
+      return;
+    }
+
+    const payload: MarkAttendanceRequest = {
+      class_section_id: detectedClassId,
+      date: selectedDate,
+      session,
+      records: markedStudents.map((s) => ({
+        student_id: s.id,
+        status: statusOf(s) as AttendanceStatus,
+      })),
+    };
+
     try {
       setSubmitting(true);
-      if (!detectedClassId) throw new Error('No class assigned.');
-      
-      await AttendanceService.markAttendance({
-        class_section_id: detectedClassId,
-        date: selectedDate,
-        session,
-        records: markedStudents
-          .map((s) => ({ student_id: s.id, status: statusOf(s) as AttendanceStatus })),
-      });
+      await AttendanceService.markAttendance(payload);
       triggerHaptic('success');
       const dayNote = isToday ? '' : ` for ${selectedDateLabel}`;
       const pendingNote = unmarked > 0
@@ -374,8 +477,25 @@ export default function ManageStudents() {
       );
       router.back();
     } catch (error: any) {
-      triggerHaptic('warning');
-      alertCompat('Error', error?.message || 'Failed to submit attendance.');
+      const isNetwork =
+        !error?.status ||
+        error.status >= 500 ||
+        error.message?.includes('Network') ||
+        error.message?.includes('connect') ||
+        error.message?.includes('fetch');
+
+      if (isNetwork) {
+        await attendanceOfflineQueue.enqueue(effectiveUserId, payload);
+        triggerHaptic('success');
+        alertCompat(
+          'Saved Offline',
+          `${markedStudents.length} ${session} attendance records saved locally. They will automatically sync when network connection returns.`
+        );
+        router.back();
+      } else {
+        triggerHaptic('warning');
+        alertCompat('Error', error?.message || 'Failed to submit attendance.');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -506,6 +626,49 @@ export default function ManageStudents() {
           <OverviewChip label="Pending" value={unmarked} color={ACCENT.amber} icon="time" isDark={isDark} />
         </View>
       </View>
+
+      {/* Offline Cached Indicator */}
+      {isOfflineCached && (
+        <View style={styles.offlineCachedBanner}>
+          <Ionicons name="cloud-offline-outline" size={14} color={ACCENT.amber} />
+          <Text style={styles.offlineCachedText}>Showing cached data · Will refresh when online</Text>
+        </View>
+      )}
+
+      {/* Class Intelligence: Chronic Absence Alert Banner */}
+      {chronicAbsentStudents.length > 0 && (
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={toggleChronicFilter}
+          style={[
+            styles.chronicAlertBanner,
+            filterChronicAbsent && styles.chronicAlertBannerActive,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel={
+            filterChronicAbsent
+              ? 'Show all students'
+              : `Filter ${chronicAbsentStudents.length} students absent 3 or more consecutive days`
+          }
+        >
+          <View style={styles.chronicAlertLeft}>
+            <View style={styles.chronicAlertIconWrap}>
+              <Ionicons name="warning" size={15} color="#EF4444" />
+            </View>
+            <Text style={styles.chronicAlertText} numberOfLines={1}>
+              <Text style={{ fontWeight: '800', color: isDark ? '#FCA5A5' : '#DC2626' }}>
+                {chronicAbsentStudents.length} student{chronicAbsentStudents.length === 1 ? '' : 's'}
+              </Text>{' '}
+              absent for 3+ consecutive days
+            </Text>
+          </View>
+          <View style={[styles.chronicFilterChip, filterChronicAbsent && styles.chronicFilterChipActive]}>
+            <Text style={[styles.chronicFilterChipText, filterChronicAbsent && styles.chronicFilterChipTextActive]}>
+              {filterChronicAbsent ? 'Show All' : 'Filter'}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      )}
 
       {/* Search Bar */}
       {total > 0 && (
@@ -647,8 +810,23 @@ export default function ManageStudents() {
                 {filteredStudents.map((item) => (
                   <SwipeableStudentCard
                     key={item.id}
-                    student={{ id: item.id, name: item.name, rollNo: item.rollNo, status: statusOf(item), photoUrl: item.photoUrl }}
+                    student={{
+                      id: item.id,
+                      name: item.name,
+                      rollNo: item.rollNo,
+                      status: statusOf(item),
+                      photoUrl: item.photoUrl,
+                      consecutiveAbsenceDays: item.consecutiveAbsenceDays,
+                      absenceStreakStartDate: item.absenceStreakStartDate,
+                      absenceStreakEndDate: item.absenceStreakEndDate,
+                      absenceStreakDates: item.absenceStreakDates,
+                      monthlyAttendancePercentage: item.monthlyAttendancePercentage,
+                      absenceRiskLevel: item.absenceRiskLevel,
+                      isIrregular: item.isIrregular,
+                      monthlyAbsentCount: item.monthlyAbsentCount,
+                    }}
                     onStatusChange={handleStatusChange}
+                    onPressStreak={setSelectedInsightStudent}
                     isDark={isDark}
                   />
                 ))}
@@ -671,6 +849,19 @@ export default function ManageStudents() {
             );
           })()
         )}
+
+        <AbsenceInsightBottomSheet
+          visible={!!selectedInsightStudent}
+          student={selectedInsightStudent}
+          onClose={() => setSelectedInsightStudent(null)}
+          onViewHistory={(studentId) => {
+            setSelectedInsightStudent(null);
+            router.push({
+              pathname: '/staff/student-details',
+              params: { id: studentId },
+            });
+          }}
+        />
       </View>
     </GestureHandlerRootView>
   );
@@ -744,4 +935,80 @@ const getStyles = (theme: SchoolTheme, isDark: boolean) => StyleSheet.create({
   quickBtnText: { fontSize: 14, fontWeight: '800' },
   submitBtn: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 16, minHeight: 56 },
   submitText: { fontSize: 16, fontWeight: '800', letterSpacing: 0.2 },
+
+  chronicAlertBanner: {
+    marginHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: isDark ? 'rgba(239, 68, 68, 0.12)' : '#FEF2F2',
+    borderWidth: 1,
+    borderColor: isDark ? 'rgba(239, 68, 68, 0.25)' : '#FECACA',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  chronicAlertBannerActive: {
+    backgroundColor: isDark ? 'rgba(239, 68, 68, 0.22)' : '#FEE2E2',
+    borderColor: isDark ? '#EF4444' : '#F87171',
+  },
+  chronicAlertLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+    marginRight: 8,
+  },
+  chronicAlertIconWrap: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    backgroundColor: isDark ? 'rgba(239, 68, 68, 0.2)' : '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chronicAlertText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: isDark ? '#FCA5A5' : '#B91C1C',
+    flex: 1,
+  },
+  chronicFilterChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: isDark ? 'rgba(239, 68, 68, 0.25)' : '#FEE2E2',
+  },
+  chronicFilterChipActive: {
+    backgroundColor: '#EF4444',
+  },
+  chronicFilterChipText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: isDark ? '#FCA5A5' : '#B91C1C',
+  },
+  chronicFilterChipTextActive: {
+    color: '#FFFFFF',
+  },
+
+  offlineCachedBanner: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: isDark ? 'rgba(245, 158, 11, 0.12)' : '#FEF3C7',
+    borderWidth: 1,
+    borderColor: isDark ? 'rgba(245, 158, 11, 0.25)' : '#FDE68A',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  offlineCachedText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: isDark ? '#FBBF24' : '#B45309',
+  },
 });

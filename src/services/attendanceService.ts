@@ -120,6 +120,14 @@ export const AttendanceService = {
             morning_status: string | null;
             afternoon_status: string | null;
             marked_at: string | null;
+            consecutive_absence_days?: number;
+            absence_streak_start_date?: string | null;
+            absence_streak_end_date?: string | null;
+            absence_streak_dates?: Array<{ date: string; status: string }>;
+            monthly_attendance_percentage?: number | null;
+            absence_risk_level?: 'none' | 'absence' | 'attention' | 'persistent' | 'irregular' | null;
+            is_irregular?: boolean;
+            monthly_absent_count?: number;
         }>;
     } | null> => {
         try {

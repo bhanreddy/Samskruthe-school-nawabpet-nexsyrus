@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, StatusBar } from 'react-native';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { View, Text, StatusBar, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import AppDatePicker from '@/src/components/AppDatePicker';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { LinearGradient } from 'expo-linear-gradient';
 import AdminHeader from '../../src/components/AdminHeader';
 import { useAccountsWebChrome } from '../../src/contexts/AccountsWebChromeContext';
 import { ADMIN_THEME } from '../../src/constants/adminTheme';
@@ -32,10 +31,10 @@ import {
   SelectField,
   SectionCard,
   ProgressRail,
-  LiveAvatar,
-  SubSectionLabel,
+  ParentBlock,
   StickySaveBar,
-  HeroMetaChip,
+  AdmissionHero,
+  FormCanvas,
   getAdmissionStyles,
 } from '../../src/components/studentAdmissionChrome';
 
@@ -110,6 +109,14 @@ export default function AddStudentScreen() {
 
   const selectedClass = classes.find((c) => c.id?.toString() === formData.class_id?.toString());
   const selectedSection = sections.find((s) => s.id?.toString() === formData.section_id?.toString());
+  const scrollRef = useRef<ScrollView>(null);
+  const sectionOffsets = useRef<number[]>([0, 0, 0, 0, 0]);
+  const displayedPhoto = photoSelection === undefined ? currentPhotoUrl : photoSelection;
+
+  const jumpToSection = useCallback((index: number) => {
+    const y = sectionOffsets.current[index] ?? 0;
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - 8), animated: true });
+  }, []);
 
   const loadReferenceData = useCallback(async () => {
     try {
@@ -317,11 +324,13 @@ export default function AddStudentScreen() {
 
   if (initialLoading) {
     return (
-      <View style={styles.loadingContainer}>
-        <LogoLoader size={60} color={ADMIN_THEME.colors.primary} />
-        <Text style={styles.loadingTitle}>Setting up form</Text>
-        <Text style={styles.loadingSubtitle}>Loading classes and reference data…</Text>
-      </View>
+      <FormCanvas isDark={isDark}>
+        <View style={styles.loadingContainer}>
+          <LogoLoader size={60} color={ADMIN_THEME.colors.primary} />
+          <Text style={styles.loadingTitle}>Setting up form</Text>
+          <Text style={styles.loadingSubtitle}>Loading classes and reference data…</Text>
+        </View>
+      </FormCanvas>
     );
   }
 
@@ -330,11 +339,8 @@ export default function AddStudentScreen() {
     ? STUDENT_STATUSES
     : STUDENT_STATUSES.filter((status) => status.code === 'active');
 
-  const gradColors: [string, string] = isEditMode
-    ? ['#52467A', '#7C6FFF']
-    : ['#4A3F6B', '#665990'];
-
   return (
+    <FormCanvas isDark={isDark}>
     <View style={styles.container}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.colors.background} />
       {!shellActive && <AdminHeader title={isEditMode ? 'Edit Student' : 'Add Student'} showBackButton />}
@@ -344,66 +350,29 @@ export default function AddStudentScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         bottomOffset={24}
-        extraScrollPadding={100}
+        extraScrollPadding={120}
+        scrollViewRef={scrollRef}
       >
-        <Animated.View entering={FadeInDown.duration(500)}>
-          <LinearGradient
-            colors={gradColors}
-            style={styles.heroCard}
-            start={{ x: 0.1, y: 0 }} end={{ x: 0.95, y: 1 }}
-          >
-            <View style={styles.heroBlob1} />
-            <View style={styles.heroBlob2} />
-            <LinearGradient
-              colors={['rgba(255,255,255,0.15)', 'rgba(255,255,255,0)']}
-              style={styles.heroGloss}
-              start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
-            />
+        <AdmissionHero
+          isEditMode={isEditMode}
+          firstName={formData.first_name}
+          lastName={formData.last_name}
+          admissionNo={formData.admission_no}
+          classLabel={selectedClass?.name}
+          sectionLabel={selectedSection?.name}
+          photoUrl={displayedPhoto}
+          statusId={formData.status_id}
+          genderId={formData.gender_id}
+          rollNumber={(formData as any).roll_number}
+        />
 
-            <LiveAvatar
-              firstName={formData.first_name || undefined}
-              lastName={formData.last_name || undefined}
-              genderId={formData.gender_id}
-            />
-
-            <Text style={styles.heroName}>
-              {formData.first_name || formData.last_name
-                ? [formData.first_name, formData.last_name].filter(Boolean).join(' ')
-                : (isEditMode ? 'Edit Profile' : 'New Student')}
-            </Text>
-            <Text style={styles.heroSub}>
-              {isEditMode
-                ? `Editing · Adm# ${formData.admission_no || '—'}`
-                : 'A polished enrollment flow for every new student'}
-            </Text>
-
-            {(selectedClass || selectedSection || formData.admission_no) ? (
-              <View style={styles.heroChips}>
-                {formData.admission_no ? (
-                  <HeroMetaChip icon="card-outline" label={formData.admission_no} />
-                ) : null}
-                {selectedClass ? (
-                  <HeroMetaChip icon="school-outline" label={selectedClass.name} />
-                ) : null}
-                {selectedSection ? (
-                  <HeroMetaChip icon="grid-outline" label={selectedSection.name} />
-                ) : null}
-              </View>
-            ) : null}
-
-            <View style={styles.modePill}>
-              <Ionicons name={isEditMode ? 'pencil' : 'person-add-outline'} size={11} color="#fff" />
-              <Text style={styles.modePillText}>{isEditMode ? 'EDIT MODE' : 'NEW ENROLLMENT'}</Text>
-            </View>
-          </LinearGradient>
-        </Animated.View>
-
-        <Animated.View entering={FadeInDown.delay(100).duration(400)}>
+        <Animated.View entering={FadeInDown.delay(80).duration(400)}>
           <ProgressRail
             activeStep={activeStep}
             completedSteps={completedSteps}
             percent={progressPercent}
             isDark={isDark}
+            onStepPress={jumpToSection}
           />
         </Animated.View>
 
@@ -413,6 +382,8 @@ export default function AddStudentScreen() {
           colorKey="personal"
           delay={140}
           complete={personalComplete}
+          stepNumber={1}
+          onLayout={(e) => { sectionOffsets.current[0] = e.nativeEvent.layout.y; }}
           meta={personalComplete ? 'Identity started' : 'Name, photo & identity'}
         >
           <StudentPhotoField
@@ -494,6 +465,8 @@ export default function AddStudentScreen() {
           colorKey="academic"
           delay={200}
           complete={academicComplete}
+          stepNumber={2}
+          onLayout={(e) => { sectionOffsets.current[1] = e.nativeEvent.layout.y; }}
           meta={academicComplete ? 'Class placement set' : 'Admission, class & year'}
         >
           <AdmissionNumberControl
@@ -562,64 +535,111 @@ export default function AddStudentScreen() {
           colorKey="parents"
           delay={260}
           complete={parentsComplete}
+          stepNumber={3}
+          onLayout={(e) => { sectionOffsets.current[2] = e.nativeEvent.layout.y; }}
           meta={parentsComplete ? 'Family contact added' : 'Optional — add when available'}
         >
           {fieldErrors.parent ? (
             <Text style={{ color: '#EF4444', fontSize: 11.5, fontWeight: '600', marginBottom: 8 }}>{fieldErrors.parent}</Text>
           ) : null}
-          <SubSectionLabel label="Father" accentColor={SECTION_COLORS.parents.accent} />
-          <View style={styles.row}>
-            <View style={styles.halfInput}>
-              <InputField label="First Name" placeholder="Father's name" value={father.first_name}
-                onChangeText={(t: string) => { clearError('parent'); setFather(p => ({ ...p, first_name: t })); }}
-                icon="person-outline" accentColor={SECTION_COLORS.parents.accent} fieldKey="ims-stu-father-given" />
+          <ParentBlock
+            title="Father"
+            icon="man-outline"
+            accentColor={SECTION_COLORS.parents.accent}
+            filled={!!father.first_name?.trim()}
+          >
+            <View style={styles.row}>
+              <View style={styles.halfInput}>
+                <InputField label="First Name" placeholder="Father's name" value={father.first_name}
+                  onChangeText={(t: string) => { clearError('parent'); setFather(p => ({ ...p, first_name: t })); }}
+                  icon="person-outline" accentColor={SECTION_COLORS.parents.accent} fieldKey="ims-stu-father-given" />
+              </View>
+              <View style={styles.halfInput}>
+                <InputField label="Last Name" placeholder="Surname" value={father.last_name}
+                  onChangeText={(t: string) => setFather(p => ({ ...p, last_name: t }))}
+                  icon="person-outline" accentColor={SECTION_COLORS.parents.accent} fieldKey="ims-stu-father-family" />
+              </View>
             </View>
-            <View style={styles.halfInput}>
-              <InputField label="Last Name" placeholder="Surname" value={father.last_name}
-                onChangeText={(t: string) => setFather(p => ({ ...p, last_name: t }))}
-                icon="person-outline" accentColor={SECTION_COLORS.parents.accent} fieldKey="ims-stu-father-family" />
+            <View style={styles.row}>
+              <View style={styles.halfInput}>
+                <InputField label="Phone" placeholder="Mobile" value={father.phone}
+                  onChangeText={(t: string) => setFather(p => ({ ...p, phone: t }))}
+                  keyboardType="phone-pad" icon="call-outline" accentColor={SECTION_COLORS.parents.accent}
+                  fieldKey="ims-stu-father-mobile" autofillMode="tel" />
+              </View>
+              <View style={styles.halfInput}>
+                <InputField label="Occupation" placeholder="Job title" value={father.occupation}
+                  onChangeText={(t: string) => setFather(p => ({ ...p, occupation: t }))}
+                  icon="briefcase-outline" accentColor={SECTION_COLORS.parents.accent} fieldKey="ims-stu-father-job" />
+              </View>
             </View>
-          </View>
-          <View style={styles.row}>
-            <View style={styles.halfInput}>
-              <InputField label="Phone" placeholder="Mobile" value={father.phone}
-                onChangeText={(t: string) => setFather(p => ({ ...p, phone: t }))}
-                keyboardType="phone-pad" icon="call-outline" accentColor={SECTION_COLORS.parents.accent}
-                fieldKey="ims-stu-father-mobile" autofillMode="tel" />
-            </View>
-            <View style={styles.halfInput}>
-              <InputField label="Occupation" placeholder="Job title" value={father.occupation}
-                onChangeText={(t: string) => setFather(p => ({ ...p, occupation: t }))}
-                icon="briefcase-outline" accentColor={SECTION_COLORS.parents.accent} fieldKey="ims-stu-father-job" />
-            </View>
-          </View>
+          </ParentBlock>
 
-          <SubSectionLabel label="Mother" accentColor={SECTION_COLORS.parents.accent} />
-          <View style={styles.row}>
-            <View style={styles.halfInput}>
-              <InputField label="First Name" placeholder="Mother's name" value={mother.first_name}
-                onChangeText={(t: string) => { clearError('parent'); setMother(p => ({ ...p, first_name: t })); }}
-                icon="person-outline" accentColor={SECTION_COLORS.parents.accent} fieldKey="ims-stu-mother-given" />
+          <ParentBlock
+            title="Mother"
+            icon="woman-outline"
+            accentColor={SECTION_COLORS.parents.accent}
+            filled={!!mother.first_name?.trim()}
+          >
+            <View style={styles.row}>
+              <View style={styles.halfInput}>
+                <InputField label="First Name" placeholder="Mother's name" value={mother.first_name}
+                  onChangeText={(t: string) => { clearError('parent'); setMother(p => ({ ...p, first_name: t })); }}
+                  icon="person-outline" accentColor={SECTION_COLORS.parents.accent} fieldKey="ims-stu-mother-given" />
+              </View>
+              <View style={styles.halfInput}>
+                <InputField label="Last Name" placeholder="Surname" value={mother.last_name}
+                  onChangeText={(t: string) => setMother(p => ({ ...p, last_name: t }))}
+                  icon="person-outline" accentColor={SECTION_COLORS.parents.accent} fieldKey="ims-stu-mother-family" />
+              </View>
             </View>
-            <View style={styles.halfInput}>
-              <InputField label="Last Name" placeholder="Surname" value={mother.last_name}
-                onChangeText={(t: string) => setMother(p => ({ ...p, last_name: t }))}
-                icon="person-outline" accentColor={SECTION_COLORS.parents.accent} fieldKey="ims-stu-mother-family" />
+            <View style={styles.row}>
+              <View style={styles.halfInput}>
+                <InputField label="Phone" placeholder="Mobile" value={mother.phone}
+                  onChangeText={(t: string) => setMother(p => ({ ...p, phone: t }))}
+                  keyboardType="phone-pad" icon="call-outline" accentColor={SECTION_COLORS.parents.accent}
+                  fieldKey="ims-stu-mother-mobile" autofillMode="tel" />
+              </View>
+              <View style={styles.halfInput}>
+                <InputField label="Occupation" placeholder="Job title" value={mother.occupation}
+                  onChangeText={(t: string) => setMother(p => ({ ...p, occupation: t }))}
+                  icon="briefcase-outline" accentColor={SECTION_COLORS.parents.accent} fieldKey="ims-stu-mother-job" />
+              </View>
             </View>
-          </View>
-          <View style={styles.row}>
-            <View style={styles.halfInput}>
-              <InputField label="Phone" placeholder="Mobile" value={mother.phone}
-                onChangeText={(t: string) => setMother(p => ({ ...p, phone: t }))}
-                keyboardType="phone-pad" icon="call-outline" accentColor={SECTION_COLORS.parents.accent}
-                fieldKey="ims-stu-mother-mobile" autofillMode="tel" />
+          </ParentBlock>
+
+          <ParentBlock
+            title="Guardian"
+            icon="shield-outline"
+            accentColor={SECTION_COLORS.parents.accent}
+            filled={!!guardian.first_name?.trim()}
+          >
+            <View style={styles.row}>
+              <View style={styles.halfInput}>
+                <InputField label="First Name" placeholder="Guardian's name" value={guardian.first_name}
+                  onChangeText={(t: string) => { clearError('parent'); setGuardian(p => ({ ...p, first_name: t })); }}
+                  icon="person-outline" accentColor={SECTION_COLORS.parents.accent} fieldKey="ims-stu-guardian-given" />
+              </View>
+              <View style={styles.halfInput}>
+                <InputField label="Last Name" placeholder="Surname" value={guardian.last_name}
+                  onChangeText={(t: string) => setGuardian(p => ({ ...p, last_name: t }))}
+                  icon="person-outline" accentColor={SECTION_COLORS.parents.accent} fieldKey="ims-stu-guardian-family" />
+              </View>
             </View>
-            <View style={styles.halfInput}>
-              <InputField label="Occupation" placeholder="Job title" value={mother.occupation}
-                onChangeText={(t: string) => setMother(p => ({ ...p, occupation: t }))}
-                icon="briefcase-outline" accentColor={SECTION_COLORS.parents.accent} fieldKey="ims-stu-mother-job" />
+            <View style={styles.row}>
+              <View style={styles.halfInput}>
+                <InputField label="Phone" placeholder="Mobile" value={guardian.phone}
+                  onChangeText={(t: string) => setGuardian(p => ({ ...p, phone: t }))}
+                  keyboardType="phone-pad" icon="call-outline" accentColor={SECTION_COLORS.parents.accent}
+                  fieldKey="ims-stu-guardian-mobile" autofillMode="tel" />
+              </View>
+              <View style={styles.halfInput}>
+                <InputField label="Occupation" placeholder="Job title" value={guardian.occupation}
+                  onChangeText={(t: string) => setGuardian(p => ({ ...p, occupation: t }))}
+                  icon="briefcase-outline" accentColor={SECTION_COLORS.parents.accent} fieldKey="ims-stu-guardian-job" />
+              </View>
             </View>
-          </View>
+          </ParentBlock>
         </SectionCard>
 
         <SectionCard
@@ -628,6 +648,8 @@ export default function AddStudentScreen() {
           colorKey="additional"
           delay={320}
           complete={detailsComplete}
+          stepNumber={4}
+          onLayout={(e) => { sectionOffsets.current[3] = e.nativeEvent.layout.y; }}
           meta="Category, religion & blood group"
         >
           <SelectField label="Category" value={formData.category_id} options={STUDENT_CATEGORIES}
@@ -647,6 +669,8 @@ export default function AddStudentScreen() {
           colorKey="credentials"
           delay={380}
           complete={loginComplete}
+          stepNumber={5}
+          onLayout={(e) => { sectionOffsets.current[4] = e.nativeEvent.layout.y; }}
           meta={isEditMode ? 'Update credentials if needed' : 'Portal access for the student'}
         >
           <InputField label="Email Address" placeholder="student@school.edu" value={formData.email}
@@ -679,6 +703,7 @@ export default function AddStudentScreen() {
         isEditMode={isEditMode}
         statusId={formData.status_id}
         missingCount={missingRequired.length}
+        missingLabels={missingRequired}
         onPress={handleSave}
         isDark={isDark}
       />
@@ -689,5 +714,6 @@ export default function AddStudentScreen() {
         onClose={() => { setEnrolledForm(null); router.back(); }}
       />
     </View>
+    </FormCanvas>
   );
 }

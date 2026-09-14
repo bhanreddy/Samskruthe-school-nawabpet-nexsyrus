@@ -507,7 +507,17 @@
     "receipts": "Receipts",
     "addStaff": "Add Staff",
     "addStudent": "Add Student",
-    "addAdmin": "Add Admin"
+    "addAdmin": "Add Admin",
+    "hi_name": "Hi, {{name}}",
+    "hero_welcome": "Where Every Rupee Finds Its Place",
+    "open_dues_bar": "{{amount}} in open dues",
+    "collected_today_bar": "{{amount}} collected today",
+    "updates_for_you": "{{count}} update for you",
+    "updates_for_you_plural": "{{count}} updates for you",
+    "desk_clear": "Desk is clear",
+    "review": "Review",
+    "view": "View",
+    "collect": "Collect"
   },
   "staff_dashboard": {
     "title": "Staff Portal",

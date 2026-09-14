@@ -87,7 +87,7 @@ function SegmentSelector<T extends string | number | boolean>({
       <Text style={[styles.label, { color: c.label }]}>
         {label}{required ? ' *' : ''}
       </Text>
-      <View style={styles.segmentRow}>
+      <View style={[styles.segmentTrack, { backgroundColor: c.field, borderColor: c.border }]}>
         {options.map((opt) => {
           const selected = value === opt.value;
           return (
@@ -95,10 +95,7 @@ function SegmentSelector<T extends string | number | boolean>({
               key={String(opt.value)}
               style={[
                 styles.segmentBtn,
-                {
-                  backgroundColor: selected ? c.accent : c.field,
-                  borderColor: selected ? c.accent : c.border,
-                },
+                selected && { backgroundColor: c.accent },
                 selected && styles.segmentBtnSelected,
               ]}
               onPress={() => onSelect(opt.value)}
@@ -627,15 +624,17 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     letterSpacing: 0.15,
   },
-  segmentRow: {
+  segmentTrack: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 6,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 5,
   },
   segmentBtn: {
     flex: 1,
-    height: 50,
-    borderRadius: 16,
-    borderWidth: 1.5,
+    height: 44,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
@@ -667,6 +666,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 14,
     gap: 12,
+    overflow: 'hidden',
   },
   panelComplete: {
     shadowColor: '#5BAA9A',

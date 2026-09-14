@@ -551,7 +551,16 @@ async function apiRequestInner<T>(
       if (response.status === 403) {
         const message = errorData.error || errorData.message || 'Access denied';
         const code = errorData.code;
-        if (!silent) alertFn('Access Denied', message);
+        const isFeatureRestriction = Boolean(errorData.access) || [
+          'PLAN_REQUIRED',
+          'FEATURE_DISABLED',
+          'COMING_SOON',
+          'BETA',
+          'MAINTENANCE',
+          'TEMPORARILY_UNAVAILABLE',
+        ].includes(code);
+
+        if (!silent && !isFeatureRestriction) alertFn('Access Denied', message);
         throw new APIError(message, 403, undefined, requestId, code);
       }
 

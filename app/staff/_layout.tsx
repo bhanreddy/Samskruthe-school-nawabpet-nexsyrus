@@ -18,10 +18,7 @@ const dashboardScreenOptions: StaffTabScreenOptions = {
 export default function StaffLayout() {
     useRequireRole('staff', 'teacher', 'admin');
 
-    /** Screens that appear in the bottom bar and can be swiped between. */
-    const SWIPEABLE_TABS = ['dashboard', 'manage-students', 'timetable', 'results'];
-
-    /** Common options for screens that should NOT be part of the swipe pager. */
+    /** Common options for screens that should NOT appear in the bottom bar. */
     const hiddenScreenOptions: StaffTabScreenOptions = {
         swipeEnabled: false,
         lazy: true,
@@ -34,13 +31,13 @@ export default function StaffLayout() {
         <MaterialTopTabs
             tabBarPosition="bottom"
             tabBar={(props) => <StaffFooter {...props} />}
-            screenOptions={({ route }) => ({
-                swipeEnabled: SWIPEABLE_TABS.includes(route.name),
+            screenOptions={{
+                swipeEnabled: false,
                 animationEnabled: true,
                 lazy: true,
-            })}
+            }}
         >
-            {/* ── Bottom-bar tabs (swipeable) ── */}
+            {/* ── Bottom-bar tabs ── */}
             <MaterialTopTabs.Screen
                 name="dashboard"
                 options={dashboardScreenOptions}

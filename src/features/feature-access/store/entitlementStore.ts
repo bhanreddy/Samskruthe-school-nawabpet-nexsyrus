@@ -3,8 +3,8 @@ import { FeatureAccessState, FeatureAccessResponse } from '../types';
 import { FeatureAccessApi } from '../services/featureAccessApi';
 import { getFeatureConfig } from '../config/featureRegistry';
 
-const CACHE_KEY = '@schoolims_entitlements_v2';
-const CACHE_VERSION = '2.0.0';
+const CACHE_KEY = '@schoolims_entitlements_v3';
+const CACHE_VERSION = '3.0.0';
 const DEFAULT_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 export interface CachedEntitlementRecord {
@@ -101,12 +101,15 @@ export const EntitlementStore = {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && typeof parsed === 'object') {
-          setState({
-            entitlements: parsed,
-            hydrated: true,
-            lastSyncAt: Date.now(),
-          });
-          return;
+          const first = Object.values(parsed)[0] as CachedEntitlementRecord | undefined;
+          if (first?.version === CACHE_VERSION) {
+            setState({
+              entitlements: parsed,
+              hydrated: true,
+              lastSyncAt: Date.now(),
+            });
+            return;
+          }
         }
       }
     } catch {

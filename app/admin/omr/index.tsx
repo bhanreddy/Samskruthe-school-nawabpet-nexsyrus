@@ -30,7 +30,7 @@ import { alertCompat } from '../../../src/utils/crossPlatformAlert';
 
 type TabKey = 'EXAMS' | 'TEMPLATES' | 'EXCEPTIONS' | 'FINALIZATION' | 'ANALYTICS' | 'AUDIT';
 
-export default function OmrControlCenterScreen() {
+function OmrControlCenterContent() {
   const { theme, isDark } = useTheme();
   const styles = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const router = useRouter();
@@ -207,9 +207,8 @@ export default function OmrControlCenterScreen() {
   };
 
   return (
-    <FeatureRouteGuard feature={FEATURE_KEYS.OMR_SCANNER}>
-      <View style={styles.root}>
-        <AdminHeader title="OMR Control Center" showBackButton={true} />
+    <View style={styles.root}>
+      <AdminHeader title="OMR Control Center" showBackButton={true} />
 
       {/* Primary Tab Navigation */}
       <View style={styles.tabBar}>
@@ -729,6 +728,13 @@ export default function OmrControlCenterScreen() {
         </View>
       </Modal>
     </View>
+  );
+}
+
+export default function OmrControlCenterScreen() {
+  return (
+    <FeatureRouteGuard feature={FEATURE_KEYS.OMR_SCANNER}>
+      <OmrControlCenterContent />
     </FeatureRouteGuard>
   );
 }

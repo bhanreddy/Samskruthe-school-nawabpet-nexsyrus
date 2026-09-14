@@ -23,7 +23,7 @@ import { FeatureRouteGuard, FEATURE_KEYS } from '../../../src/features/feature-a
 
 type MappingMode = 'GRID' | 'BULK' | 'SCAN';
 
-export default function OmrAnswerKeyScreen() {
+function OmrAnswerKeyContent() {
   const { theme, isDark } = useTheme();
   const styles = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const router = useRouter();
@@ -241,9 +241,8 @@ export default function OmrAnswerKeyScreen() {
   const totalQuestions = activeExam?.question_count || activeExam?.total_questions || 50;
 
   return (
-    <FeatureRouteGuard feature={FEATURE_KEYS.OMR_SCANNER}>
-      <View style={styles.root}>
-        <AdminHeader title="Answer Key Mapping" showBackButton={true} />
+    <View style={styles.root}>
+      <AdminHeader title="Answer Key Mapping" showBackButton={true} />
 
       {/* Exam Selector Bar */}
       <View style={styles.examBar}>
@@ -475,6 +474,13 @@ export default function OmrAnswerKeyScreen() {
         </View>
       </Modal>
     </View>
+  );
+}
+
+export default function OmrAnswerKeyScreen() {
+  return (
+    <FeatureRouteGuard feature={FEATURE_KEYS.OMR_SCANNER}>
+      <OmrAnswerKeyContent />
     </FeatureRouteGuard>
   );
 }

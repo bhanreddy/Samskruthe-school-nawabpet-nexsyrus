@@ -21,7 +21,7 @@ export default function FineDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<null | 'waive' | 'pay' | 'cancel' | 'approve' | 'reject'>(null);
   const [amount, setAmount] = useState('');
-  const [reason, setReason] = useState(WAIVER_REASONS[0]);
+  const [reason, setReason] = useState<string>(WAIVER_REASONS[0]);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
