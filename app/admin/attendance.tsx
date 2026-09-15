@@ -264,28 +264,21 @@ function StaffCard({
     .toUpperCase();
 
   const cycleStatus = () => {
-    if (isSelf) return;
     onSelectStatus(STATUS_CYCLE[status] ?? 'present');
   };
 
-  const CardShell: any = isSelf ? View : TouchableOpacity;
-  const shellProps = isSelf
-    ? {
-        accessibilityRole: 'text' as const,
-        accessibilityLabel: `${staff.staff_name || 'Staff'}, your attendance. Mark it from the staff app.`,
-      }
-    : {
-        activeOpacity: 0.82,
-        onPress: cycleStatus,
-        accessibilityRole: 'button' as const,
-        accessibilityLabel: `${staff.staff_name || 'Staff'}, ${meta.label}. Tap to mark ${nextLabel}`,
-      };
+  const shellProps = {
+    activeOpacity: 0.82,
+    onPress: cycleStatus,
+    accessibilityRole: 'button' as const,
+    accessibilityLabel: `${staff.staff_name || 'Staff'}${isSelf ? ' (you)' : ''}, ${meta.label}. Tap to mark ${nextLabel}`,
+  };
 
   return (
     <Animated.View
       entering={FadeIn.delay(Math.min(index, 8) * 28).duration(220)}
     >
-      <CardShell
+      <TouchableOpacity
         {...shellProps}
         style={[
           styles.card,
@@ -294,7 +287,6 @@ function StaffCard({
             borderColor: cardBorder,
             borderLeftWidth: 3,
             borderLeftColor: isSelf ? '#7C6FFF' : meta.dot,
-            opacity: isSelf ? 0.92 : 1,
           },
           clay(isDark, 'sm'),
         ]}
@@ -332,10 +324,8 @@ function StaffCard({
                 style={[styles.staffRole, { color: isDark ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.44)' }]}
                 numberOfLines={1}
               >
-                {isSelf
-                  ? 'Mark your own attendance from the staff app'
-                  : (staff.designation || 'Staff')}
-                {!isSelf && staff.verification_source ? (' • ' + (staff.verification_source === 'mobile_v2' ? 'Mobile V2' : staff.verification_source)) : ''}
+                {staff.designation || 'Staff'}
+                {staff.verification_source ? (' • ' + (staff.verification_source === 'mobile_v2' ? 'Mobile V2' : staff.verification_source)) : ''}
               </Text>
               {!!(staff.check_in_time || staff.check_out_time) && (
                 <Text style={{ fontSize: 10, color: '#10B981', fontWeight: '600', marginTop: 2 }}>
@@ -346,49 +336,32 @@ function StaffCard({
           </View>
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            {isSelf ? (
-              <View
-                style={[
-                  styles.selfLockChip,
-                  {
-                    backgroundColor: isDark ? 'rgba(124,111,255,0.12)' : 'rgba(124,111,255,0.08)',
-                    borderColor: isDark ? 'rgba(124,111,255,0.22)' : 'rgba(124,111,255,0.18)',
-                  },
-                ]}
+            <StatusSegment
+              status={status}
+              isDark={isDark}
+              onSelect={onSelectStatus}
+              stretch={compact}
+            />
+            {onOpenCorrection && (
+              <TouchableOpacity
+                onPress={(e) => {
+                  e?.stopPropagation?.();
+                  onOpenCorrection(staff);
+                }}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                style={{
+                  padding: 6,
+                  borderRadius: 8,
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+                }}
+                accessibilityLabel="Correct staff attendance"
               >
-                <Ionicons name="lock-closed" size={12} color="#7C6FFF" />
-                <Text style={styles.selfLockText}>Locked</Text>
-              </View>
-            ) : (
-              <>
-                <StatusSegment
-                  status={status}
-                  isDark={isDark}
-                  onSelect={onSelectStatus}
-                  stretch={compact}
-                />
-                {onOpenCorrection && (
-                  <TouchableOpacity
-                    onPress={(e) => {
-                      e?.stopPropagation?.();
-                      onOpenCorrection(staff);
-                    }}
-                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                    style={{
-                      padding: 6,
-                      borderRadius: 8,
-                      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
-                    }}
-                    accessibilityLabel="Correct staff attendance"
-                  >
-                    <Ionicons name="create-outline" size={15} color={isDark ? '#C7D2FE' : '#6366F1'} />
-                  </TouchableOpacity>
-                )}
-              </>
+                <Ionicons name="create-outline" size={15} color={isDark ? '#C7D2FE' : '#6366F1'} />
+              </TouchableOpacity>
             )}
           </View>
         </View>
-      </CardShell>
+      </TouchableOpacity>
     </Animated.View>
   );
 }
@@ -535,7 +508,6 @@ export default function AdminAttendanceScreen() {
   const onRefresh = () => { setRefreshing(true); fetchAttendance(); };
 
   const setStaffStatus = (staffId: string, status: string) => {
-    if (isOwnStaffRecord({ staff_id: staffId }, user)) return;
     bulkSaveRequestKeyRef.current = null;
     setStaffList((prev) =>
       prev.map((s) => (s.staff_id === staffId ? { ...s, status } : s))
@@ -544,9 +516,7 @@ export default function AdminAttendanceScreen() {
 
   const handleMarkAll = () => {
     bulkSaveRequestKeyRef.current = null;
-    const ids = new Set(
-      filteredStaff.filter((s) => !isOwnStaffRecord(s, user)).map((s) => s.staff_id)
-    );
+    const ids = new Set(filteredStaff.map((s) => s.staff_id));
     if (ids.size === 0) return;
     setStaffList((prev) =>
       prev.map((s) => (ids.has(s.staff_id) ? { ...s, status: 'present' } : s))
@@ -563,19 +533,10 @@ export default function AdminAttendanceScreen() {
       setIsSaving(true);
       const originals = new Map(originalStaffRef.current.map((s) => [s.staff_id, s.status || null]));
       const records = staffList
-        .filter((s) => !isOwnStaffRecord(s, user))
         .map((s) => ({ staff_id: s.staff_id, status: s.status || 'absent' }))
         .filter((row) => originals.get(row.staff_id) !== row.status);
       if (records.length === 0) {
-        const onlySelfChanged = staffList.some((s) => (
-          isOwnStaffRecord(s, user) && originals.get(s.staff_id) !== (s.status || 'absent')
-        ));
-        alertCompat(
-          onlySelfChanged ? 'Your Attendance' : 'No Changes',
-          onlySelfChanged
-            ? 'You cannot mark your own attendance here. Use the staff app, or save changes for other staff.'
-            : 'There are no staff attendance changes to save.'
-        );
+        alertCompat('No Changes', 'There are no staff attendance changes to save.');
         return;
       }
       const idempotencyKey = bulkSaveRequestKeyRef.current || Crypto.randomUUID();
@@ -944,7 +905,7 @@ export default function AdminAttendanceScreen() {
                 compact={isCompact}
                 isSelf={isOwnStaffRecord(item, user)}
                 onSelectStatus={(status) => setStaffStatus(item.staff_id, status)}
-                onOpenCorrection={isOwnStaffRecord(item, user) ? undefined : (s) => setCorrectionStaff(s)}
+                onOpenCorrection={(s) => setCorrectionStaff(s)}
               />
             )}
             ListFooterComponent={
@@ -1225,16 +1186,6 @@ const styles = StyleSheet.create({
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
   youBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8 },
   youBadgeText: { fontSize: 10, fontWeight: '800', color: '#7C6FFF', letterSpacing: 0.2 },
-  selfLockChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-  },
-  selfLockText: { fontSize: 11, fontWeight: '800', color: '#7C6FFF', letterSpacing: 0.2 },
 
   segmentTrack: {
     flexDirection: 'row',
