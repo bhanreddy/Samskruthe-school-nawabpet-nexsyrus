@@ -47,6 +47,23 @@ type TransportHint = 'none' | 'no_assignment' | 'fee_not_set';
 
 const fmtINR = (n: number) => `₹${n.toLocaleString('en-IN')}`;
 
+function feeRemaining(fee: Pick<StudentFee, 'amount_due' | 'discount' | 'amount_paid'>): number {
+  const raw =
+    Number(fee.amount_due || 0) - Number(fee.discount || 0) - Number(fee.amount_paid || 0);
+  return Math.round(raw * 100) / 100;
+}
+
+function feeSettlementLabel(fee: StudentFee): string {
+  const remaining = feeRemaining(fee);
+  if (remaining > 0) return `${fmtINR(remaining)} due`;
+
+  const waived = Number(fee.discount || 0);
+  const paid = Number(fee.amount_paid || 0);
+  if (waived > 0 && paid <= 0) return 'Fully waived';
+  if (paid > 0 && waived > 0) return 'Settled';
+  return 'Fully paid';
+}
+
 function studentClassSectionLabel(student: Student): string | null {
   const enrollment = student.current_enrollment;
   const className = (enrollment?.class_name || enrollment?.class_code || '').trim();
@@ -315,6 +332,7 @@ export default function FeeAdjustmentsScreen() {
     setSearchQuery('');
     setSearchResults([]);
     setSelectedFee(null);
+    setAdjustmentType('waive');
     setAdjustAmount('');
     setReason('');
     setTransportHint('none');
@@ -335,6 +353,7 @@ export default function FeeAdjustmentsScreen() {
     setStudentFees([]);
     setTransportHint('none');
     setSelectedFee(null);
+    setAdjustmentType('waive');
     setAdjustAmount('');
     setReason('');
   };
@@ -342,6 +361,11 @@ export default function FeeAdjustmentsScreen() {
   const handleSelectFee = (fee: StudentFee) => {
     setSelectedFee(fee);
     setAdjustAmount('');
+    // Settled heads still need to be adjustable — switch to Add so extra
+    // charges can be posted even when nothing remains to waive.
+    if (feeRemaining(fee) <= 0) {
+      setAdjustmentType('add');
+    }
   };
 
   const handleSubmit = async () => {
@@ -360,7 +384,14 @@ export default function FeeAdjustmentsScreen() {
       return;
     }
 
-    const remaining = selectedFee.amount_due - selectedFee.discount - selectedFee.amount_paid;
+    const remaining = Math.max(0, feeRemaining(selectedFee));
+    if (adjustmentType === 'waive' && remaining <= 0) {
+      alertCompat(
+        'Error',
+        'This fee is fully paid or waived. Switch to Add to post an extra charge.'
+      );
+      return;
+    }
     if (adjustmentType === 'waive' && parsedAmount > remaining) {
       alertCompat(
         'Error',
@@ -428,9 +459,8 @@ export default function FeeAdjustmentsScreen() {
     );
   }, [history, historyFilter]);
 
-  const remainingBalance = selectedFee
-    ? selectedFee.amount_due - selectedFee.discount - selectedFee.amount_paid
-    : 0;
+  const remainingBalance = selectedFee ? Math.max(0, feeRemaining(selectedFee)) : 0;
+  const selectedFeeSettled = !!selectedFee && remainingBalance <= 0;
   const selectedStudentClassSection = selectedStudent
     ? studentClassSectionLabel(selectedStudent)
     : null;
@@ -440,7 +470,8 @@ export default function FeeAdjustmentsScreen() {
     !!selectedFee &&
     !!adjustAmount.trim() &&
     !!reason.trim() &&
-    !submitting;
+    !submitting &&
+    (adjustmentType === 'add' || remainingBalance > 0);
 
   const renderHistoryItem = useCallback(
     ({ item, index }: { item: AdjustmentLog; index: number }) => (
@@ -479,7 +510,7 @@ export default function FeeAdjustmentsScreen() {
             <View style={{ flex: 1 }}>
               <Text style={styles.introTitle}>Waive or correct fees</Text>
               <Text style={styles.introDesc}>
-                Search a student, pick a fee head, then waive or add an amount with a clear reason.
+                Search a student, choose waive or add, then pick any fee head — including fully paid or waived ones.
               </Text>
             </View>
           </View>
@@ -517,7 +548,7 @@ export default function FeeAdjustmentsScreen() {
             </View>
             <View>
               <Text style={styles.cardTitle}>Apply Adjustment</Text>
-              <Text style={styles.cardSubtitle}>Step through student → fee → amount</Text>
+              <Text style={styles.cardSubtitle}>Step through student → type → fee → amount</Text>
             </View>
           </View>
 
@@ -652,139 +683,17 @@ export default function FeeAdjustmentsScreen() {
                 <View style={styles.stepBadge}>
                   <Text style={styles.stepBadgeText}>2</Text>
                 </View>
-                <Text style={styles.stepLabel}>Select fee component</Text>
+                <Text style={styles.stepLabel}>Adjustment type</Text>
               </View>
 
-              {loadingFees ? (
-                <View style={styles.inlineLoader}>
-                  <LogoLoader size={28} color={ADMIN_THEME.colors.primary} />
-                  <Text style={styles.hintText}>Loading fee heads…</Text>
-                </View>
-              ) : studentFees.length === 0 ? (
-                <View style={styles.inlineEmpty}>
-                  <Ionicons name="document-outline" size={20} color="#94A3B8" />
-                  <Text style={styles.inlineEmptyText}>
-                    No fee structures assigned to this student
-                  </Text>
-                </View>
-              ) : (
-                <View style={styles.chipGrid}>
-                  {studentFees.map((fee) => {
-                    const remaining = fee.amount_due - fee.discount - fee.amount_paid;
-                    const isSelected = selectedFee?.id === fee.id;
-                    const isFullyPaid = remaining <= 0;
-                    const chipDisabled = adjustmentType === 'waive' && isFullyPaid;
-
-                    return (
-                      <Pressable
-                        key={fee.id}
-                        disabled={chipDisabled}
-                        style={({ pressed }) => [
-                          styles.feeChip,
-                          isSelected && styles.feeChipActive,
-                          fee.is_transport && !isSelected && styles.feeChipTransport,
-                          chipDisabled && styles.feeChipDisabled,
-                          pressed && !chipDisabled && { transform: [{ scale: 0.98 }], opacity: 0.92 },
-                        ]}
-                        onPress={() => handleSelectFee(fee)}
-                      >
-                        {isSelected && (
-                          <View style={styles.feeChipCheck}>
-                            <Ionicons name="checkmark" size={10} color="#fff" />
-                          </View>
-                        )}
-                        {fee.is_transport ? (
-                          <Ionicons
-                            name="bus-outline"
-                            size={14}
-                            color={isSelected ? '#fff' : '#0E7490'}
-                            style={{ marginBottom: 4 }}
-                          />
-                        ) : null}
-                        <Text
-                          style={[
-                            styles.feeChipText,
-                            isSelected && styles.feeChipTextActive,
-                            chipDisabled && styles.feeChipTextDisabled,
-                          ]}
-                          numberOfLines={2}
-                        >
-                          {fee.fee_type}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.feeChipBalance,
-                            isSelected && styles.feeChipBalanceActive,
-                            chipDisabled && styles.feeChipBalanceDisabled,
-                            isFullyPaid && !chipDisabled && styles.feeChipPaid,
-                          ]}
-                        >
-                          {isFullyPaid ? 'Fully paid' : `${fmtINR(remaining)} due`}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              )}
-
-              {!loadingFees && selectedStudent && transportHint !== 'none' ? (
-                <View style={styles.transportHint}>
-                  <Ionicons name="bus-outline" size={16} color="#0E7490" />
-                  <Text style={styles.transportHintText}>
-                    {transportHint === 'fee_not_set'
-                      ? 'This student is on a bus route, but Accounts has not set a stop fee yet. Set it under Accounts → Transport Fees, then refresh.'
-                      : 'Transport fee appears only after this student is assigned to a bus route/stop. Stop fees set in Accounts apply to assigned students — assign the route under Transport, then reopen this student.'}
-                  </Text>
-                </View>
-              ) : null}
-            </>
-          )}
-
-          {/* Step 3: Form */}
-          {selectedFee && (
-            <View style={styles.formContainer}>
-              <View style={[styles.stepRow, { marginTop: 4 }]}>
-                <View style={styles.stepBadge}>
-                  <Text style={styles.stepBadgeText}>3</Text>
-                </View>
-                <Text style={styles.stepLabel}>Amount & reason</Text>
-              </View>
-
-              {/* Balance mini grid */}
-              <View style={styles.balanceGrid}>
-                <View style={styles.balanceCell}>
-                  <Text style={styles.balanceCellLabel}>Assigned</Text>
-                  <Text style={styles.balanceCellVal}>
-                    {fmtINR(selectedFee.amount_due)}
-                  </Text>
-                </View>
-                <View style={styles.balanceCell}>
-                  <Text style={styles.balanceCellLabel}>Paid</Text>
-                  <Text style={[styles.balanceCellVal, { color: '#059669' }]}>
-                    {fmtINR(selectedFee.amount_paid)}
-                  </Text>
-                </View>
-                <View style={styles.balanceCell}>
-                  <Text style={styles.balanceCellLabel}>Waiver</Text>
-                  <Text style={[styles.balanceCellVal, { color: ADMIN_THEME.colors.primary }]}>
-                    {fmtINR(selectedFee.discount)}
-                  </Text>
-                </View>
-                <View style={[styles.balanceCell, styles.balanceCellHighlight]}>
-                  <Text style={styles.balanceCellLabel}>Remaining</Text>
-                  <Text style={[styles.balanceCellVal, { color: '#DC2626' }]}>
-                    {fmtINR(remainingBalance)}
-                  </Text>
-                </View>
-              </View>
-
-              <Text style={styles.fieldLabel}>Adjustment type</Text>
               <View style={styles.typeSelector}>
                 <Pressable
+                  disabled={selectedFeeSettled}
                   style={({ pressed }) => [
                     styles.typeOption,
                     adjustmentType === 'waive' && styles.typeOptionActive,
-                    pressed && { transform: [{ scale: 0.98 }] },
+                    selectedFeeSettled && styles.typeOptionDisabled,
+                    pressed && !selectedFeeSettled && { transform: [{ scale: 0.98 }] },
                   ]}
                   onPress={() => setAdjustmentType('waive')}
                 >
@@ -808,7 +717,9 @@ export default function FeeAdjustmentsScreen() {
                   >
                     Waive
                   </Text>
-                  <Text style={styles.typeOptionDesc}>Reduce what they owe</Text>
+                  <Text style={styles.typeOptionDesc}>
+                    {selectedFeeSettled ? 'Nothing left to waive' : 'Reduce what they owe'}
+                  </Text>
                 </Pressable>
 
                 <Pressable
@@ -842,6 +753,156 @@ export default function FeeAdjustmentsScreen() {
                   <Text style={styles.typeOptionDesc}>Increase what they owe</Text>
                 </Pressable>
               </View>
+
+              <View style={[styles.stepRow, { marginTop: 8 }]}>
+                <View style={styles.stepBadge}>
+                  <Text style={styles.stepBadgeText}>3</Text>
+                </View>
+                <Text style={styles.stepLabel}>Select fee component</Text>
+              </View>
+
+              {loadingFees ? (
+                <View style={styles.inlineLoader}>
+                  <LogoLoader size={28} color={ADMIN_THEME.colors.primary} />
+                  <Text style={styles.hintText}>Loading fee heads…</Text>
+                </View>
+              ) : studentFees.length === 0 ? (
+                <View style={styles.inlineEmpty}>
+                  <Ionicons name="document-outline" size={20} color="#94A3B8" />
+                  <Text style={styles.inlineEmptyText}>
+                    No fee structures assigned to this student
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  <View style={styles.chipGrid}>
+                    {studentFees.map((fee) => {
+                      const remaining = feeRemaining(fee);
+                      const isSelected = selectedFee?.id === fee.id;
+                      const isSettled = remaining <= 0;
+                      const waived = Number(fee.discount || 0);
+
+                      return (
+                        <Pressable
+                          key={fee.id}
+                          style={({ pressed }) => [
+                            styles.feeChip,
+                            isSelected && styles.feeChipActive,
+                            fee.is_transport && !isSelected && styles.feeChipTransport,
+                            pressed && { transform: [{ scale: 0.98 }], opacity: 0.92 },
+                          ]}
+                          onPress={() => handleSelectFee(fee)}
+                        >
+                          {isSelected && (
+                            <View style={styles.feeChipCheck}>
+                              <Ionicons name="checkmark" size={10} color="#fff" />
+                            </View>
+                          )}
+                          {fee.is_transport ? (
+                            <Ionicons
+                              name="bus-outline"
+                              size={14}
+                              color={isSelected ? ADMIN_THEME.colors.primary : '#0E7490'}
+                              style={{ marginBottom: 4 }}
+                            />
+                          ) : null}
+                          <Text
+                            style={[
+                              styles.feeChipText,
+                              isSelected && styles.feeChipTextActive,
+                            ]}
+                            numberOfLines={2}
+                          >
+                            {fee.fee_type}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.feeChipBalance,
+                              isSelected && styles.feeChipBalanceActive,
+                              isSettled && !isSelected && (waived > 0 ? styles.feeChipWaived : styles.feeChipPaid),
+                            ]}
+                          >
+                            {feeSettlementLabel(fee)}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  <Text style={styles.hintText}>
+                    Paid and waived heads stay selectable — use Add to post an extra charge.
+                  </Text>
+                </>
+              )}
+
+              {!loadingFees && selectedStudent && transportHint !== 'none' ? (
+                <View style={styles.transportHint}>
+                  <Ionicons name="bus-outline" size={16} color="#0E7490" />
+                  <Text style={styles.transportHintText}>
+                    {transportHint === 'fee_not_set'
+                      ? 'This student is on a bus route, but Accounts has not set a stop fee yet. Set it under Accounts → Transport Fees, then refresh.'
+                      : 'Transport fee appears only after this student is assigned to a bus route/stop. Stop fees set in Accounts apply to assigned students — assign the route under Transport, then reopen this student.'}
+                  </Text>
+                </View>
+              ) : null}
+            </>
+          )}
+
+          {/* Step 3: Form */}
+          {selectedFee && (
+            <View style={styles.formContainer}>
+              <View style={[styles.stepRow, { marginTop: 4 }]}>
+                <View style={styles.stepBadge}>
+                  <Text style={styles.stepBadgeText}>4</Text>
+                </View>
+                <Text style={styles.stepLabel}>Amount & reason</Text>
+              </View>
+
+              {/* Balance mini grid */}
+              <View style={styles.balanceGrid}>
+                <View style={styles.balanceCell}>
+                  <Text style={styles.balanceCellLabel}>Assigned</Text>
+                  <Text style={styles.balanceCellVal}>
+                    {fmtINR(selectedFee.amount_due)}
+                  </Text>
+                </View>
+                <View style={styles.balanceCell}>
+                  <Text style={styles.balanceCellLabel}>Paid</Text>
+                  <Text style={[styles.balanceCellVal, { color: '#059669' }]}>
+                    {fmtINR(selectedFee.amount_paid)}
+                  </Text>
+                </View>
+                <View style={styles.balanceCell}>
+                  <Text style={styles.balanceCellLabel}>Waiver</Text>
+                  <Text style={[styles.balanceCellVal, { color: ADMIN_THEME.colors.primary }]}>
+                    {fmtINR(selectedFee.discount)}
+                  </Text>
+                </View>
+                <View
+                  style={[
+                    styles.balanceCell,
+                    remainingBalance > 0 ? styles.balanceCellHighlight : styles.balanceCellSettled,
+                  ]}
+                >
+                  <Text style={styles.balanceCellLabel}>Remaining</Text>
+                  <Text
+                    style={[
+                      styles.balanceCellVal,
+                      { color: remainingBalance > 0 ? '#DC2626' : '#059669' },
+                    ]}
+                  >
+                    {fmtINR(remainingBalance)}
+                  </Text>
+                </View>
+              </View>
+
+              {selectedFeeSettled ? (
+                <View style={styles.settledBanner}>
+                  <Ionicons name="checkmark-circle" size={16} color="#059669" />
+                  <Text style={styles.settledBannerText}>
+                    This head is {feeSettlementLabel(selectedFee).toLowerCase()}. Add an extra amount to reopen a due.
+                  </Text>
+                </View>
+              ) : null}
 
               <Text style={styles.fieldLabel}>
                 {adjustmentType === 'add' ? 'Amount to add' : 'Amount to waive'}
@@ -1479,6 +1540,9 @@ const getStyles = (theme: Theme, isDark: boolean) =>
     feeChipPaid: {
       color: '#059669',
     },
+    feeChipWaived: {
+      color: '#7C3AED',
+    },
 
     /* Form */
     formContainer: {
@@ -1505,6 +1569,32 @@ const getStyles = (theme: Theme, isDark: boolean) =>
     balanceCellHighlight: {
       borderColor: isDark ? 'rgba(239,68,68,0.35)' : '#FECACA',
       backgroundColor: isDark ? 'rgba(239,68,68,0.08)' : '#FEF2F2',
+    },
+    balanceCellSettled: {
+      borderColor: isDark ? 'rgba(16,185,129,0.35)' : '#BBF7D0',
+      backgroundColor: isDark ? 'rgba(16,185,129,0.08)' : '#F0FDF4',
+    },
+    settledBanner: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      marginBottom: 12,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(16,185,129,0.28)' : '#BBF7D0',
+      backgroundColor: isDark ? 'rgba(16,185,129,0.10)' : '#ECFDF5',
+    },
+    settledBannerText: {
+      flex: 1,
+      fontSize: 12,
+      lineHeight: 17,
+      fontWeight: '600',
+      color: isDark ? '#6EE7B7' : '#047857',
+    },
+    typeOptionDisabled: {
+      opacity: 0.45,
     },
     balanceCellLabel: {
       fontSize: 11,

@@ -26,7 +26,9 @@ import Animated, {
   useSharedValue,
   useAnimatedScrollHandler,
 } from 'react-native-reanimated';
-import { api } from '../../src/services/apiClient';
+import { api, APIError } from '../../src/services/apiClient';
+import { useAuth } from '../../src/hooks/useAuth';
+import type { ValidatedUser } from '../../src/types/auth';
 import AppDatePicker, { toYMD } from '../../src/components/AppDatePicker';
 import StaffAttendanceCorrectionModal from '../../src/components/admin/StaffAttendanceCorrectionModal';
 import StaffDeviceManagementModal from '../../src/components/admin/StaffDeviceManagementModal';
@@ -137,6 +139,18 @@ const STATUS_CYCLE: Record<string, string> = {
   half_day: 'absent',
 };
 
+function sameId(a: unknown, b: unknown) {
+  if (a == null || b == null) return false;
+  return String(a).toLowerCase() === String(b).toLowerCase();
+}
+
+function isOwnStaffRecord(staff: { staff_id?: string; person_id?: string } | null | undefined, user: ValidatedUser | null) {
+  if (!staff || !user) return false;
+  const staffId = user.staffId || user.staff_id;
+  const personId = user.personId || user.person_id;
+  return sameId(staff.staff_id, staffId) || sameId(staff.person_id, personId);
+}
+
 // ─── Compact status segment (explicit tap targets) ────────────────────────────
 function StatusSegment({
   status, isDark, onSelect, stretch,
@@ -231,11 +245,11 @@ function MiniStat({
 
 // ─── Staff Card ───────────────────────────────────────────────────────────────
 function StaffCard({
-  staff, index, isDark, cardBg, cardBorder, onSelectStatus, compact, onOpenCorrection,
+  staff, index, isDark, cardBg, cardBorder, onSelectStatus, compact, onOpenCorrection, isSelf,
 }: {
   staff: any; index: number; isDark: boolean;
   cardBg: string; cardBorder: string; onSelectStatus: (status: string) => void;
-  compact: boolean; onOpenCorrection?: (staff: any) => void;
+  compact: boolean; onOpenCorrection?: (staff: any) => void; isSelf?: boolean;
 }) {
   const status = staff.status || 'absent';
   const meta = STATUS_META[status] ?? STATUS_META.absent;
@@ -250,25 +264,37 @@ function StaffCard({
     .toUpperCase();
 
   const cycleStatus = () => {
+    if (isSelf) return;
     onSelectStatus(STATUS_CYCLE[status] ?? 'present');
   };
+
+  const CardShell: any = isSelf ? View : TouchableOpacity;
+  const shellProps = isSelf
+    ? {
+        accessibilityRole: 'text' as const,
+        accessibilityLabel: `${staff.staff_name || 'Staff'}, your attendance. Mark it from the staff app.`,
+      }
+    : {
+        activeOpacity: 0.82,
+        onPress: cycleStatus,
+        accessibilityRole: 'button' as const,
+        accessibilityLabel: `${staff.staff_name || 'Staff'}, ${meta.label}. Tap to mark ${nextLabel}`,
+      };
 
   return (
     <Animated.View
       entering={FadeIn.delay(Math.min(index, 8) * 28).duration(220)}
     >
-      <TouchableOpacity
-        activeOpacity={0.82}
-        onPress={cycleStatus}
-        accessibilityRole="button"
-        accessibilityLabel={`${staff.staff_name || 'Staff'}, ${meta.label}. Tap to mark ${nextLabel}`}
+      <CardShell
+        {...shellProps}
         style={[
           styles.card,
           {
             backgroundColor: cardBg,
             borderColor: cardBorder,
             borderLeftWidth: 3,
-            borderLeftColor: meta.dot,
+            borderLeftColor: isSelf ? '#7C6FFF' : meta.dot,
+            opacity: isSelf ? 0.92 : 1,
           },
           clay(isDark, 'sm'),
         ]}
@@ -289,18 +315,27 @@ function StaffCard({
             </LinearGradient>
 
             <View style={styles.cardInfo}>
-              <Text
-                style={[styles.staffName, { color: isDark ? '#FFFFFF' : '#111827' }]}
-                numberOfLines={1}
-              >
-                {staff.staff_name || 'Unknown'}
-              </Text>
+              <View style={styles.nameRow}>
+                <Text
+                  style={[styles.staffName, { color: isDark ? '#FFFFFF' : '#111827', flexShrink: 1, marginBottom: 0 }]}
+                  numberOfLines={1}
+                >
+                  {staff.staff_name || 'Unknown'}
+                </Text>
+                {isSelf ? (
+                  <View style={[styles.youBadge, { backgroundColor: isDark ? 'rgba(124,111,255,0.18)' : 'rgba(124,111,255,0.12)' }]}>
+                    <Text style={styles.youBadgeText}>You</Text>
+                  </View>
+                ) : null}
+              </View>
               <Text
                 style={[styles.staffRole, { color: isDark ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.44)' }]}
                 numberOfLines={1}
               >
-                {staff.designation || 'Staff'}
-                {staff.verification_source ? (' • ' + (staff.verification_source === 'mobile_v2' ? 'Mobile V2' : staff.verification_source)) : ''}
+                {isSelf
+                  ? 'Mark your own attendance from the staff app'
+                  : (staff.designation || 'Staff')}
+                {!isSelf && staff.verification_source ? (' • ' + (staff.verification_source === 'mobile_v2' ? 'Mobile V2' : staff.verification_source)) : ''}
               </Text>
               {!!(staff.check_in_time || staff.check_out_time) && (
                 <Text style={{ fontSize: 10, color: '#10B981', fontWeight: '600', marginTop: 2 }}>
@@ -311,32 +346,49 @@ function StaffCard({
           </View>
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <StatusSegment
-              status={status}
-              isDark={isDark}
-              onSelect={onSelectStatus}
-              stretch={compact}
-            />
-            {onOpenCorrection && (
-              <TouchableOpacity
-                onPress={(e) => {
-                  e?.stopPropagation?.();
-                  onOpenCorrection(staff);
-                }}
-                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                style={{
-                  padding: 6,
-                  borderRadius: 8,
-                  backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
-                }}
-                accessibilityLabel="Correct staff attendance"
+            {isSelf ? (
+              <View
+                style={[
+                  styles.selfLockChip,
+                  {
+                    backgroundColor: isDark ? 'rgba(124,111,255,0.12)' : 'rgba(124,111,255,0.08)',
+                    borderColor: isDark ? 'rgba(124,111,255,0.22)' : 'rgba(124,111,255,0.18)',
+                  },
+                ]}
               >
-                <Ionicons name="create-outline" size={15} color={isDark ? '#C7D2FE' : '#6366F1'} />
-              </TouchableOpacity>
+                <Ionicons name="lock-closed" size={12} color="#7C6FFF" />
+                <Text style={styles.selfLockText}>Locked</Text>
+              </View>
+            ) : (
+              <>
+                <StatusSegment
+                  status={status}
+                  isDark={isDark}
+                  onSelect={onSelectStatus}
+                  stretch={compact}
+                />
+                {onOpenCorrection && (
+                  <TouchableOpacity
+                    onPress={(e) => {
+                      e?.stopPropagation?.();
+                      onOpenCorrection(staff);
+                    }}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    style={{
+                      padding: 6,
+                      borderRadius: 8,
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)',
+                    }}
+                    accessibilityLabel="Correct staff attendance"
+                  >
+                    <Ionicons name="create-outline" size={15} color={isDark ? '#C7D2FE' : '#6366F1'} />
+                  </TouchableOpacity>
+                )}
+              </>
             )}
           </View>
         </View>
-      </TouchableOpacity>
+      </CardShell>
     </Animated.View>
   );
 }
@@ -420,6 +472,7 @@ function FilterMenu({
 export default function AdminAttendanceScreen() {
   const router = useRouter();
   const { isDark } = useTheme();
+  const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const headerHeight = insets.top + 60;
@@ -482,6 +535,7 @@ export default function AdminAttendanceScreen() {
   const onRefresh = () => { setRefreshing(true); fetchAttendance(); };
 
   const setStaffStatus = (staffId: string, status: string) => {
+    if (isOwnStaffRecord({ staff_id: staffId }, user)) return;
     bulkSaveRequestKeyRef.current = null;
     setStaffList((prev) =>
       prev.map((s) => (s.staff_id === staffId ? { ...s, status } : s))
@@ -490,7 +544,9 @@ export default function AdminAttendanceScreen() {
 
   const handleMarkAll = () => {
     bulkSaveRequestKeyRef.current = null;
-    const ids = new Set(filteredStaff.map((s) => s.staff_id));
+    const ids = new Set(
+      filteredStaff.filter((s) => !isOwnStaffRecord(s, user)).map((s) => s.staff_id)
+    );
     if (ids.size === 0) return;
     setStaffList((prev) =>
       prev.map((s) => (ids.has(s.staff_id) ? { ...s, status: 'present' } : s))
@@ -507,10 +563,19 @@ export default function AdminAttendanceScreen() {
       setIsSaving(true);
       const originals = new Map(originalStaffRef.current.map((s) => [s.staff_id, s.status || null]));
       const records = staffList
+        .filter((s) => !isOwnStaffRecord(s, user))
         .map((s) => ({ staff_id: s.staff_id, status: s.status || 'absent' }))
         .filter((row) => originals.get(row.staff_id) !== row.status);
       if (records.length === 0) {
-        alertCompat('No Changes', 'There are no staff attendance changes to save.');
+        const onlySelfChanged = staffList.some((s) => (
+          isOwnStaffRecord(s, user) && originals.get(s.staff_id) !== (s.status || 'absent')
+        ));
+        alertCompat(
+          onlySelfChanged ? 'Your Attendance' : 'No Changes',
+          onlySelfChanged
+            ? 'You cannot mark your own attendance here. Use the staff app, or save changes for other staff.'
+            : 'There are no staff attendance changes to save.'
+        );
         return;
       }
       const idempotencyKey = bulkSaveRequestKeyRef.current || Crypto.randomUUID();
@@ -520,12 +585,15 @@ export default function AdminAttendanceScreen() {
         attendance: records,
         reason: 'Attendance sheet saved from the administrator portal',
         idempotency_key: idempotencyKey,
-      });
+      }, { silent: true });
       originalStaffRef.current = staffList.map((s) => ({ ...s }));
       bulkSaveRequestKeyRef.current = null;
       alertCompat('✓ Saved', 'Attendance marked successfully.');
-    } catch {
-      alertCompat('Error', 'Failed to save attendance.');
+    } catch (err) {
+      const message = err instanceof APIError && err.message
+        ? err.message
+        : 'Failed to save attendance.';
+      alertCompat('Error', message);
     } finally {
       setIsSaving(false);
     }
@@ -874,8 +942,9 @@ export default function AdminAttendanceScreen() {
                 cardBg={cardBg}
                 cardBorder={cardBorder}
                 compact={isCompact}
+                isSelf={isOwnStaffRecord(item, user)}
                 onSelectStatus={(status) => setStaffStatus(item.staff_id, status)}
-                onOpenCorrection={(s) => setCorrectionStaff(s)}
+                onOpenCorrection={isOwnStaffRecord(item, user) ? undefined : (s) => setCorrectionStaff(s)}
               />
             )}
             ListFooterComponent={
@@ -1153,6 +1222,19 @@ const styles = StyleSheet.create({
   cardInfo: { flex: 1, marginRight: 8, minWidth: 0 },
   staffName: { fontSize: 14, fontWeight: '700', letterSpacing: -0.2, marginBottom: 2 },
   staffRole: { fontSize: 11, fontWeight: '500' },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
+  youBadge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: 8 },
+  youBadgeText: { fontSize: 10, fontWeight: '800', color: '#7C6FFF', letterSpacing: 0.2 },
+  selfLockChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  selfLockText: { fontSize: 11, fontWeight: '800', color: '#7C6FFF', letterSpacing: 0.2 },
 
   segmentTrack: {
     flexDirection: 'row',
