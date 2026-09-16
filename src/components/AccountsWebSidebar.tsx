@@ -107,6 +107,14 @@ export const ACCOUNTS_SIDEBAR_NAV: AccountsSidebarNavItem[] = [
     permission: 'omr.create_answer_key',
   },
   {
+    title: 'Print OMR Sheets',
+    icon: 'print-outline',
+    route: '/accounts/omr-print',
+    gradient: ['#4338CA', '#6366F1'],
+    category: 'Academic',
+    permission: 'omr.view',
+  },
+  {
     title: 'Certificates',
     icon: 'ribbon-outline',
     route: '/accounts/certificate-generator',
@@ -311,7 +319,16 @@ export default function AccountsWebSidebar({
 
   const grouped = useMemo(() => {
     const workspace = items.filter((i) =>
-      ['/accounts/dashboard', '/accounts/fees', '/accounts/invoices', '/accounts/marks', '/accounts/exams', '/accounts/certificate-generator'].includes(i.route),
+      [
+        '/accounts/dashboard',
+        '/accounts/fees',
+        '/accounts/invoices',
+        '/accounts/marks',
+        '/accounts/exams',
+        '/accounts/omr-answer-key',
+        '/accounts/omr-print',
+        '/accounts/certificate-generator',
+      ].includes(i.route),
     );
     const people = items.filter((i) =>
       ['/accounts/manage-users', '/accounts/pending-enrollments', '/accounts/student-login-qr'].includes(i.route),

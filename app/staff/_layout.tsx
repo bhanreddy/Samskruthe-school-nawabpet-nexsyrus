@@ -61,6 +61,7 @@ export default function StaffLayout() {
             <MaterialTopTabs.Screen name="messages" options={{ ...hiddenScreenOptions, headerShown: false } as any} />
             <MaterialTopTabs.Screen name="diary" options={{ ...hiddenScreenOptions, headerShown: false } as any} />
             <MaterialTopTabs.Screen name="events" options={{ ...hiddenScreenOptions, title: 'Events', headerShown: false } as any} />
+            <MaterialTopTabs.Screen name="calendar" options={{ ...hiddenScreenOptions, title: 'Calendar', headerShown: false } as any} />
             <MaterialTopTabs.Screen name="academic-today" options={{ ...hiddenScreenOptions, title: 'Academic Today', headerShown: false } as any} />
             <MaterialTopTabs.Screen name="leaves" options={{ ...hiddenScreenOptions, headerShown: false } as any} />
             <MaterialTopTabs.Screen name="lms-upload" options={hiddenScreenOptions} />

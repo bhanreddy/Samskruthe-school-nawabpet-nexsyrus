@@ -10,7 +10,6 @@ import {
   TextInput,
   RefreshControl,
   Platform,
-  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -25,7 +24,6 @@ import {
   OmrAuditLog,
 } from '../../../src/services/omrService';
 import { FeatureRouteGuard, FEATURE_KEYS } from '../../../src/features/feature-access';
-import { API_BASE_URL } from '../../../src/services/apiClient';
 import { alertCompat } from '../../../src/utils/crossPlatformAlert';
 
 type TabKey = 'EXAMS' | 'TEMPLATES' | 'EXCEPTIONS' | 'FINALIZATION' | 'ANALYTICS' | 'AUDIT';
@@ -198,12 +196,15 @@ function OmrControlCenterContent() {
     }
   };
 
-  // Download Printable Template SVG
-  const handleDownloadTemplateSvg = (templateId: string) => {
-    const url = `${API_BASE_URL}/omr/templates/${templateId}/sheet-svg`;
-    Linking.openURL(url).catch(() => {
-      alertCompat('Download Link', `Open this URL in your browser to print the sheet:\n${url}`);
-    });
+  // Open dedicated print screen (scanner-aligned A4 sheets with school name header)
+  const handlePrintSheets = (opts?: { examId?: string; templateId?: string }) => {
+    router.push({
+      pathname: '/admin/omr/print',
+      params: {
+        ...(opts?.examId ? { examId: opts.examId } : {}),
+        ...(opts?.templateId ? { templateId: opts.templateId } : {}),
+      },
+    } as any);
   };
 
   return (
@@ -258,13 +259,22 @@ function OmrControlCenterContent() {
                   <Text style={styles.sectionTitle}>Configured OMR Exams</Text>
                   <Text style={styles.sectionSubtitle}>Select an exam to configure keys, scanner, or batches</Text>
                 </View>
-                <TouchableOpacity
-                  style={styles.primaryActionBtn}
-                  onPress={() => setCreateExamModalVisible(true)}
-                >
-                  <Ionicons name="add" size={18} color="#FFF" style={{ marginRight: 4 }} />
-                  <Text style={styles.primaryActionBtnText}>New Exam</Text>
-                </TouchableOpacity>
+                <View style={styles.headerActions}>
+                  <TouchableOpacity
+                    style={styles.secondaryActionBtn}
+                    onPress={() => handlePrintSheets(selectedExam ? { examId: selectedExam.id } : undefined)}
+                  >
+                    <Ionicons name="print-outline" size={18} color="#4F46E5" style={{ marginRight: 4 }} />
+                    <Text style={styles.secondaryActionBtnText}>Print Sheets</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.primaryActionBtn}
+                    onPress={() => setCreateExamModalVisible(true)}
+                  >
+                    <Ionicons name="add" size={18} color="#FFF" style={{ marginRight: 4 }} />
+                    <Text style={styles.primaryActionBtnText}>New Exam</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
 
               {exams.length === 0 ? (
@@ -321,6 +331,14 @@ function OmrControlCenterContent() {
                         </View>
 
                         <View style={styles.examCardActions}>
+                          <TouchableOpacity
+                            style={styles.smallOutlineBtn}
+                            onPress={() => handlePrintSheets({ examId: exam.id })}
+                          >
+                            <Ionicons name="print-outline" size={14} color="#4F46E5" style={{ marginRight: 4 }} />
+                            <Text style={styles.smallOutlineBtnText}>Print</Text>
+                          </TouchableOpacity>
+
                           <TouchableOpacity
                             style={styles.smallOutlineBtn}
                             onPress={() => router.push({ pathname: '/admin/omr/answer-key', params: { examId: exam.id } })}
@@ -388,7 +406,7 @@ function OmrControlCenterContent() {
                     </View>
                     <View style={styles.tplSpecItem}>
                       <Text style={styles.tplSpecVal}>{tpl.geometry?.rollDigits || tpl.roll_number_digits || 4} Digits</Text>
-                      <Text style={styles.tplSpecLbl}>Roll Matrix</Text>
+                      <Text style={styles.tplSpecLbl}>Admission</Text>
                     </View>
                     <View style={styles.tplSpecItem}>
                       <Text style={styles.tplSpecVal}>4 Markers</Text>
@@ -398,10 +416,10 @@ function OmrControlCenterContent() {
 
                   <TouchableOpacity
                     style={styles.printTemplateBtn}
-                    onPress={() => handleDownloadTemplateSvg(tpl.id)}
+                    onPress={() => handlePrintSheets({ templateId: tpl.id })}
                   >
                     <Ionicons name="print-outline" size={18} color="#FFF" style={{ marginRight: 6 }} />
-                    <Text style={styles.printTemplateBtnText}>Print / Download A4 SVG Sheet</Text>
+                    <Text style={styles.printTemplateBtnText}>Print A4 OMR Sheet</Text>
                   </TouchableOpacity>
                 </View>
               ))}
@@ -433,7 +451,7 @@ function OmrControlCenterContent() {
                   >
                     <Text style={styles.examCardTitle}>{item.exam_title || 'OMR sheet'}</Text>
                     <Text style={styles.sectionSubtitle}>
-                      {item.exception_type || 'REVIEW_REQUIRED'} · Sheet {item.sheet_id} · Roll {item.detected_roll_number || 'unidentified'}
+                      {item.exception_type || 'REVIEW_REQUIRED'} · Sheet {item.sheet_id} · Admission {item.detected_roll_number || 'unidentified'}
                     </Text>
                   </TouchableOpacity>
                 ))
@@ -792,6 +810,12 @@ function getStyles(theme: SchoolTheme, isDark: boolean) {
       justifyContent: 'space-between',
       alignItems: 'center',
       marginBottom: 16,
+      gap: 12,
+    },
+    headerActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
     },
     sectionTitle: {
       fontSize: 17,
@@ -813,6 +837,21 @@ function getStyles(theme: SchoolTheme, isDark: boolean) {
     },
     primaryActionBtnText: {
       color: '#FFFFFF',
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    secondaryActionBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: isDark ? 'rgba(79,70,229,0.18)' : '#EEF2FF',
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: isDark ? '#3730A3' : '#C7D2FE',
+    },
+    secondaryActionBtnText: {
+      color: '#4F46E5',
       fontSize: 13,
       fontWeight: '700',
     },
@@ -881,6 +920,8 @@ function getStyles(theme: SchoolTheme, isDark: boolean) {
       paddingTop: 12,
       borderTopWidth: 1,
       borderTopColor: isDark ? 'rgba(255,255,255,0.05)' : '#F3F4F6',
+      flexWrap: 'wrap',
+      gap: 8,
     },
     markingPill: {
       backgroundColor: isDark ? 'rgba(79, 70, 229, 0.15)' : '#EEF2FF',
@@ -895,6 +936,7 @@ function getStyles(theme: SchoolTheme, isDark: boolean) {
     },
     examCardActions: {
       flexDirection: 'row',
+      flexWrap: 'wrap',
       gap: 6,
     },
     smallOutlineBtn: {

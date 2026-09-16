@@ -30,6 +30,7 @@ describe('Feature Access Platform Unit Tests', () => {
     it('resolves exact route patterns', () => {
       expect(resolveFeatureKeyFromRoute('/admin/analytics')).toBe(FEATURE_KEYS.ANALYTICS);
       expect(resolveFeatureKeyFromRoute('/admin/omr')).toBe(FEATURE_KEYS.OMR_SCANNER);
+      expect(resolveFeatureKeyFromRoute('/accounts/omr-print')).toBe(FEATURE_KEYS.OMR_SCANNER);
       expect(resolveFeatureKeyFromRoute('/admin/visitors')).toBe(FEATURE_KEYS.VISITOR_MANAGEMENT);
       expect(resolveFeatureKeyFromRoute('/admin/academic-planner')).toBe(FEATURE_KEYS.ACADEMIC_PLANNING);
     });
@@ -37,6 +38,7 @@ describe('Feature Access Platform Unit Tests', () => {
     it('resolves sub-routes via prefix matching', () => {
       expect(resolveFeatureKeyFromRoute('/admin/analytics/attendance-drop')).toBe(FEATURE_KEYS.ANALYTICS);
       expect(resolveFeatureKeyFromRoute('/admin/omr/answer-key')).toBe(FEATURE_KEYS.OMR_SCANNER);
+      expect(resolveFeatureKeyFromRoute('/admin/omr/print')).toBe(FEATURE_KEYS.OMR_SCANNER);
     });
 
     it('returns null for unregistered or invalid routes', () => {

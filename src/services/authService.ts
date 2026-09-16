@@ -204,20 +204,67 @@ function mapAdditiveValidationError(err: any): string {
   return errorMsg;
 }
 
-function mapQrExchangeError(error: any): string {
-  if (error instanceof APIError && error.statusCode === 0) {
-    return 'Internet connection is required for QR login.';
+function mapQrExchangeError(error: any): { error: string; code?: string } {
+  const code = typeof error?.code === 'string' ? error.code : undefined;
+  if (error instanceof APIError && (error.statusCode === 0 || error.statusCode === 408)) {
+    const timeout = error.statusCode === 408 || /timed out|timeout/i.test(error.message || '');
+    return {
+      error: timeout
+        ? 'SchoolIMS took too long to respond. Please try again.'
+        : 'Unable to reach SchoolIMS. Check your internet connection and try again.',
+      code: timeout ? 'QR_SERVER_ERROR' : 'NETWORK_ERROR',
+    };
+  }
+  if (code) {
+    return { error: error?.message || 'QR login failed.', code };
   }
   if (error?.code === 'NOT_SCHOOLIMS_LOGIN_QR' || error?.code === 'UNSUPPORTED_LOGIN_QR_VERSION' || error?.code === 'INVALID_LOGIN_QR') {
-    return 'This is not a valid SchoolIMS login QR.';
+    return { error: 'This QR code is not a valid SchoolIMS login QR.', code: 'QR_INVALID' };
   }
-  if (error instanceof APIError && (error.statusCode === 503 || error.statusCode === 429)) {
-    return 'QR login is temporarily unavailable. Please wait and try again.';
+  if (error instanceof APIError && (error.statusCode === 503 || error.statusCode === 429 || error.statusCode === 502 || error.statusCode === 504)) {
+    return { error: "We couldn't complete QR login right now. Please try again.", code: error.code || 'QR_LOGIN_UNAVAILABLE' };
   }
   if (error instanceof APIError && error.statusCode === 401) {
-    return 'This login QR is no longer valid. Please request a new QR from your school.';
+    return {
+      error: error.message || 'This QR code has expired. Please generate a new QR.',
+      code: error.code || 'QR_TOKEN_EXPIRED',
+    };
   }
-  return 'Unable to sign in using this QR. Please contact your school administrator.';
+  return { error: "We couldn't complete QR login right now. Please try again.", code: 'UNKNOWN_ERROR' };
+}
+
+function createQrLoginRequestId(): string {
+  return `qr_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+async function establishQrSupabaseSession(exchange: {
+  token?: string;
+  refresh_token?: string;
+  tokenHash?: string;
+  type?: string;
+}): Promise<{ session: Session; userId: string } | null> {
+  if (exchange.token && exchange.refresh_token) {
+    const { data, error } = await supabase.auth.setSession({
+      access_token: exchange.token,
+      refresh_token: exchange.refresh_token,
+    });
+    if (!error && data.session?.user?.id) {
+      return { session: data.session, userId: data.session.user.id };
+    }
+  }
+  if (exchange.tokenHash) {
+    const otpType = !exchange.type || exchange.type === 'magiclink' || exchange.type === 'signup'
+      ? 'email'
+      : exchange.type;
+    const { data, error } = await supabase.auth.verifyOtp({
+      token_hash: exchange.tokenHash,
+      type: otpType as 'email' | 'magiclink' | 'signup' | 'recovery' | 'invite' | 'email_change',
+    });
+    if (!error && data.session?.user?.id) {
+      return { session: data.session, userId: data.session.user.id };
+    }
+  }
+  return null;
 }
 
 /**
@@ -240,7 +287,7 @@ async function completeAdditiveVaultLogin(
       return { error: 'Verification failed. Your session could not be validated.' };
     }
 
-    if (validatedUser.schoolId !== SCHOOL_ID) {
+    if (Number(validatedUser.schoolId) !== Number(SCHOOL_ID)) {
       if (previousActiveUserId) await doSwitchAccount(previousActiveUserId);
       return { error: `This account does not belong to ${SCHOOL_NAME}.\nContact your school administrator.` };
     }
@@ -679,17 +726,25 @@ async function finalizeSupabaseSignIn(
   supabaseSession: Session,
   userId: string,
   recoveryCredential?: RecoveryCredential,
-): Promise<{ session?: AuthSession; error?: string }> {
+  options?: { requestId?: string; omitAuth?: boolean },
+): Promise<{ session?: AuthSession; error?: string; code?: string }> {
   try {
     const validatedUser = await api.post<ValidatedUser>('/auth/validate-school-user', {}, {
-      headers: { Authorization: `Bearer ${supabaseSession.access_token}` },
+      headers: {
+        Authorization: `Bearer ${supabaseSession.access_token}`,
+        ...(options?.requestId ? { 'X-Request-Id': options.requestId } : {}),
+      },
       silent: true,
+      omitAuth: options?.omitAuth === true,
     });
     if (!validatedUser) throw new Error('Verification failed. Your session could not be validated.');
     if (validatedUser.userId !== userId) throw new Error('Session identity verification failed.');
-    if (validatedUser.schoolId !== SCHOOL_ID) {
+    if (Number(validatedUser.schoolId) !== Number(SCHOOL_ID)) {
       await AuthService.signOut();
-      return { error: `This account does not belong to ${SCHOOL_NAME}.\nContact your school administrator.` };
+      return {
+        error: `This account does not belong to ${SCHOOL_NAME}.\nContact your school administrator.`,
+        code: 'QR_SCHOOL_MISMATCH',
+      };
     }
 
     const reg = await staffBiometricService.getStoredRegistration();
@@ -751,7 +806,10 @@ async function finalizeSupabaseSignIn(
       errorMsg = 'Tenant context missing. Please restart the app and try again.';
     }
     await AuthService.signOut();
-    return { error: errorMsg };
+    return {
+      error: errorMsg,
+      code: errCode || 'QR_SESSION_CREATE_FAILED',
+    };
   }
 }
 
@@ -874,25 +932,45 @@ export const AuthService = {
     });
   },
 
-  signInWithQr: async (qrPayload: string): Promise<{ session?: AuthSession; error?: string }> => {
+  signInWithQr: async (qrPayload: string): Promise<{ session?: AuthSession; error?: string; code?: string }> => {
     await clearAuthState();
+    const requestId = createQrLoginRequestId();
+    console.info('[qr-login]', { event: 'qr_login_request', requestId, endpoint: '/auth/qr/resolve' });
     try {
-      const exchange = await api.post<{ tokenHash: string; type: 'magiclink' }>(
+      const exchange = await api.post<{
+        token?: string;
+        refresh_token?: string;
+        tokenHash?: string;
+        type?: 'magiclink' | 'email';
+      }>(
         '/auth/qr/resolve',
         { qrPayload },
-        { silent: true, timeoutMs: 20000, omitAuth: true },
+        {
+          silent: true,
+          timeoutMs: 20000,
+          omitAuth: true,
+          headers: { 'X-Request-Id': requestId },
+        },
       );
-      const { data, error } = await supabase.auth.verifyOtp({
-        token_hash: exchange.tokenHash,
-        type: exchange.type,
-      });
-      if (error || !data.session || !data.user) {
-        return { error: 'This login QR is no longer valid. Please request a new QR from your school.' };
+      const established = await establishQrSupabaseSession(exchange);
+      if (!established) {
+        return {
+          error: "We couldn't complete the login. Please try again.",
+          code: 'QR_SESSION_CREATE_FAILED',
+        };
       }
-      const result = await finalizeSupabaseSignIn(data.session, data.user.id);
-      return result.session ? result : { error: 'Unable to sign in using this QR. Please contact your school administrator.' };
+      const result = await finalizeSupabaseSignIn(established.session, established.userId, undefined, {
+        requestId,
+        omitAuth: true,
+      });
+      return result.session
+        ? result
+        : {
+            error: result.error || "We couldn't complete the login. Please try again.",
+            code: result.code || 'QR_SESSION_CREATE_FAILED',
+          };
     } catch (error: any) {
-      return { error: mapQrExchangeError(error) };
+      return mapQrExchangeError(error);
     }
   },
 
@@ -955,27 +1033,32 @@ export const AuthService = {
 
       beginInternalSwap();
       try {
-        const exchange = await api.post<{ tokenHash: string; type: 'magiclink' }>(
+        const exchange = await api.post<{
+          token?: string;
+          refresh_token?: string;
+          tokenHash?: string;
+          type?: 'magiclink' | 'email';
+        }>(
           '/auth/qr/resolve',
           { qrPayload },
-          { silent: true, timeoutMs: 20000, omitAuth: true },
+          { silent: true, timeoutMs: 20000, omitAuth: true, headers: { 'X-Request-Id': createQrLoginRequestId() } },
         );
-        const { data, error } = await supabase.auth.verifyOtp({
-          token_hash: exchange.tokenHash,
-          type: exchange.type,
-        });
-        if (error || !data.session || !data.user) {
+        const established = await establishQrSupabaseSession(exchange);
+        if (!established) {
           if (previousActiveUserId) {
             try { await doSwitchAccount(previousActiveUserId); } catch { /* best-effort */ }
           }
-          return { error: 'This login QR is no longer valid. Please request a new QR from your school.' };
+          return {
+            error: "We couldn't complete the login. Please try again.",
+            code: 'QR_SESSION_CREATE_FAILED',
+          };
         }
-        return completeAdditiveVaultLogin(data.session, previousActiveUserId);
+        return completeAdditiveVaultLogin(established.session, previousActiveUserId);
       } catch (error: any) {
         if (previousActiveUserId) {
           try { await doSwitchAccount(previousActiveUserId); } catch { /* best-effort */ }
         }
-        return { error: mapQrExchangeError(error) };
+        return mapQrExchangeError(error);
       } finally {
         endInternalSwap();
       }

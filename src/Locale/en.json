@@ -572,8 +572,26 @@
   },
   "announcements": {
     "title": "Announcements",
-    "subtitle": "Stay updated with latest news",
-    "important": "IMPORTANT"
+    "subtitle": "What's happening at school",
+    "board": "Notice board",
+    "important": "IMPORTANT",
+    "all": "All",
+    "pinned": "Important",
+    "emptyTitle": "You're all caught up",
+    "emptySubtitle": "New school notices will appear here.",
+    "emptyImportant": "No important notices right now.",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "readMore": "Read more",
+    "showLess": "Show less",
+    "allDay": "All day",
+    "updates": "{{count}} updates",
+    "updatesLabel": "updates",
+    "newBadge": "New",
+    "pinnedCount": "{{count}} important",
+    "from": "From {{name}}",
+    "retry": "Try again",
+    "offlineHint": "Showing saved updates. Tap to refresh."
   },
   "attendance_screen": {
     "title": "Attendance History",
@@ -667,6 +685,7 @@
     "backToAccounts": "Back to accounts",
     "addAccountTitle": "Scan QR to add this account",
     "validating": "Validating login QR…",
+    "verifying": "Verifying secure login…",
     "signingIn": "Signing you in securely…"
   },
   "wELCOMETOTHEFUTURE": "✨  WELCOME TO THE FUTURE",

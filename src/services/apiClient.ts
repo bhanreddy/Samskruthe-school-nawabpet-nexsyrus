@@ -323,6 +323,9 @@ async function apiRequestInner<T>(
   if (!isMultipart) {
     headers['Content-Type'] = 'application/json';
   }
+  if (!headers['X-Request-Id'] && !headers['x-request-id']) {
+    headers['X-Request-Id'] = `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  }
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
@@ -423,9 +426,10 @@ async function apiRequestInner<T>(
 
       // Handle unauthorized (401)
       if (response.status === 401) {
-        if (endpoint.split('?')[0] === '/auth/qr/resolve') {
+        const authPath = endpoint.split('?')[0];
+        if (authPath === '/auth/qr/resolve' || authPath === '/auth/validate-school-user') {
           throw new APIError(
-            errorData.error || 'This login QR is no longer valid.',
+            errorData.message || errorData.error || 'This login QR is no longer valid.',
             401,
             undefined,
             requestId,
@@ -613,6 +617,15 @@ async function apiRequestInner<T>(
     }
 
     if (error?.name === 'AbortError') {
+      if (endpoint.split('?')[0] === '/auth/qr/resolve') {
+        throw new APIError(
+          'SchoolIMS took too long to respond. Please try again.',
+          408,
+          undefined,
+          undefined,
+          'QR_SERVER_ERROR',
+        );
+      }
       throw new APIError('Data refresh timed out and will retry later.', 0);
     }
 

@@ -421,7 +421,36 @@ export const omrService = {
     } catch {
       return { success: true, data: [] };
     }
-  }
+  },
+
+  async getTemplatePrintHtml(templateId: string, params?: {
+    copies?: number;
+    title?: string;
+  }): Promise<{ html: string; school_name: string; page_count: number; template_code?: string; mode?: string }> {
+    const res = await api.get<any>(`/omr/templates/${templateId}/print-html`, {
+      copies: params?.copies,
+      title: params?.title,
+    });
+    return unwrapOmr(res);
+  },
+
+  async getExamPrintHtml(examId: string, params?: {
+    mode?: 'blank' | 'students';
+    copies?: number;
+  }): Promise<{
+    html: string;
+    school_name: string;
+    page_count: number;
+    template_code?: string;
+    exam_title?: string;
+    mode?: string;
+  }> {
+    const res = await api.get<any>(`/omr/exams/${examId}/print-html`, {
+      mode: params?.mode,
+      copies: params?.copies,
+    });
+    return unwrapOmr(res);
+  },
 };
 
 export const OmrService = omrService;

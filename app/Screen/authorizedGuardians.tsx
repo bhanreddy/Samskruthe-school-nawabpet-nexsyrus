@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,36 +10,54 @@ import {
   Alert,
   Modal,
   Image,
+  Pressable,
+  Linking,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from '@/src/utils/haptics';
 import { useAuth } from '@/src/hooks/useAuth';
 import { useTheme } from '@/src/hooks/useTheme';
+import { clayCard, clayInset } from '@/src/theme/clayStyles';
+import { schoolColorWithAlpha } from '@/src/constants/schoolConfig';
+import ScreenLayout from '@/src/components/ScreenLayout';
+import StudentSubpageHeader from '@/src/components/StudentSubpageHeader';
 import { visitorService, type AuthorizedGuardian } from '@/src/services/visitorService';
 
+const ACCENT = '#059669';
 const RELATIONSHIPS = ['Father', 'Mother', 'Grandfather', 'Grandmother', 'Uncle', 'Aunt', 'Family Driver', 'Other Guardian'];
+
+const STEPS = [
+  { icon: 'person-add-outline' as const, title: 'Add people you trust', copy: 'Family or a regular driver.' },
+  { icon: 'camera-outline' as const, title: 'Attach a clear photo', copy: 'Helps the gate confirm identity.' },
+  { icon: 'key-outline' as const, title: 'Generate a pass in seconds', copy: 'No more last-minute phone calls.' },
+];
 
 export default function AuthorizedGuardiansScreen() {
   const router = useRouter();
-  const { user, portalContexts } = useAuth();
-  const { isDark } = useTheme();
+  const { portalContexts } = useAuth();
+  const { isDark, theme } = useTheme();
 
   const studentId = portalContexts?.activeContext?.student_id || '';
   const [guardians, setGuardians] = useState<AuthorizedGuardian[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
-  // Modal Form
   const [name, setName] = useState('');
   const [relationship, setRelationship] = useState('Father');
   const [mobile, setMobile] = useState('');
   const [idReference, setIdReference] = useState('');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+
+  const styles = useMemo(() => createStyles(isDark, theme.colors), [isDark, theme.colors]);
 
   const loadGuardians = async () => {
     if (!studentId) return;
@@ -57,6 +75,12 @@ export default function AuthorizedGuardiansScreen() {
   useEffect(() => {
     loadGuardians();
   }, [studentId]);
+
+  const openModal = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setFormError(null);
+    setModalVisible(true);
+  };
 
   const handlePickPhoto = async () => {
     Haptics.selectionAsync();
@@ -78,12 +102,17 @@ export default function AuthorizedGuardiansScreen() {
 
   const handleAddGuardian = async () => {
     if (!name.trim() || !mobile.trim()) {
-      Alert.alert('Missing Fields', 'Please enter guardian name and mobile number.');
+      setFormError('Name and mobile number are required.');
+      return;
+    }
+    if (mobile.trim().length < 10) {
+      setFormError('Enter a valid 10-digit mobile number.');
       return;
     }
 
     try {
       setSubmitting(true);
+      setFormError(null);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
       const res = await visitorService.addGuardian({
@@ -109,349 +138,469 @@ export default function AuthorizedGuardiansScreen() {
     }
   };
 
-  const bgColor = isDark ? '#0B0F17' : '#F4F6F9';
-  const cardBg = isDark ? '#161E2E' : '#FFFFFF';
-  const textColor = isDark ? '#F1F5F9' : '#0F172A';
-  const subColor = isDark ? '#94A3B8' : '#64748B';
-  const borderColor = isDark ? '#26334A' : '#E2E8F0';
+  const callGuardian = (number: string) => {
+    Haptics.selectionAsync();
+    Linking.openURL(`tel:${number}`).catch(() => {});
+  };
 
   return (
-    <SafeAreaView style={[styles.root, { backgroundColor: bgColor }]}>
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: borderColor }]}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-          accessibilityLabel="Go back"
-        >
-          <Ionicons name="arrow-back" size={24} color={textColor} />
-        </TouchableOpacity>
-        <View style={styles.headerTitleBlock}>
-          <Text style={[styles.headerTitle, { color: textColor }]}>Authorized Guardians</Text>
-          <Text style={[styles.headerSub, { color: subColor }]}>Child Release Whitelist</Text>
-        </View>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => setModalVisible(true)}
-        >
-          <Ionicons name="add" size={22} color="#FFFFFF" />
-        </TouchableOpacity>
-      </View>
+    <ScreenLayout>
+      <SafeAreaView style={styles.root} edges={['left', 'right', 'bottom']}>
+        <StudentSubpageHeader
+          title="Guardians"
+          subtitle="People trusted to collect your child"
+          onBack={() => router.back()}
+          right={
+            <Pressable style={styles.addButton} onPress={openModal} accessibilityRole="button" accessibilityLabel="Add guardian">
+              <Ionicons name="add" size={20} color="#FFFFFF" />
+            </Pressable>
+          }
+        />
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {/* Policy Box */}
-        <View style={[styles.policyBox, { backgroundColor: cardBg, borderColor }]}>
-          <Ionicons name="shield-checkmark-outline" size={20} color="#10B981" />
-          <Text style={[styles.policyText, { color: subColor }]}>
-            Registered guardians are verified by gatekeepers during student dismissals. Ensure clear facial photos are attached for instant identity confirmation.
-          </Text>
-        </View>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.policyBox}>
+            <View style={styles.policyIcon}>
+              <Ionicons name="shield-checkmark" size={18} color={ACCENT} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.policyTitle}>Verified at the gate</Text>
+              <Text style={styles.policyText}>
+                Gatekeepers match a clear photo with the pickup pass before your child is released.
+              </Text>
+            </View>
+          </View>
 
-        {loading ? (
-          <View style={styles.centerContainer}>
-            <ActivityIndicator size="small" color="#10B981" />
-          </View>
-        ) : guardians.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Ionicons name="people-circle-outline" size={64} color={subColor} />
-            <Text style={[styles.emptyTitle, { color: textColor }]}>No Authorized Guardians Added</Text>
-            <Text style={[styles.emptySub, { color: subColor }]}>
-              Pre-authorize family members or personal drivers to ensure fast and secure student pickups at the gate.
-            </Text>
-            <TouchableOpacity style={styles.addFirstBtn} onPress={() => setModalVisible(true)}>
-              <Text style={styles.addFirstBtnText}>+ Add First Guardian</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          guardians.map((g) => (
-            <View key={g.id} style={[styles.guardianCard, { backgroundColor: cardBg, borderColor }]}>
-              <View style={styles.guardianRow}>
-                <View style={styles.avatarWrap}>
-                  {g.photo_url ? (
-                    <Image source={{ uri: g.photo_url }} style={styles.avatarImg} />
-                  ) : (
-                    <Ionicons name="person" size={28} color="#10B981" />
-                  )}
-                </View>
-                <View style={styles.guardianInfo}>
-                  <View style={styles.nameRow}>
-                    <Text style={[styles.guardianName, { color: textColor }]}>{g.name}</Text>
-                    <View style={styles.statusPill}>
-                      <Text style={styles.statusPillText}>{g.status || 'ACTIVE'}</Text>
-                    </View>
-                  </View>
-                  <Text style={[styles.guardianMeta, { color: subColor }]}>
-                    {g.relationship} • {g.mobile}
-                  </Text>
-                  {g.id_reference_masked ? (
-                    <Text style={[styles.idMasked, { color: subColor }]}>
-                      ID Ref: {g.id_reference_masked}
-                    </Text>
-                  ) : null}
-                </View>
+          {loading ? (
+            <View style={styles.centerContainer}>
+              <ActivityIndicator size="small" color={ACCENT} />
+              <Text style={styles.loadingLabel}>Loading trusted people…</Text>
+            </View>
+          ) : guardians.length === 0 ? (
+            <Animated.View entering={FadeIn.duration(280)} style={styles.emptyContainer}>
+              <View style={styles.emptyIconWell}>
+                <Ionicons name="people" size={32} color={ACCENT} />
               </View>
-
-              <TouchableOpacity
-                style={[styles.quickPassBtn, { borderColor }]}
-                onPress={() => router.push('/Screen/studentPickup' as any)}
-              >
-                <Ionicons name="key-outline" size={14} color="#10B981" />
-                <Text style={styles.quickPassText}>Generate Pickup Pass for {g.name.split(' ')[0]}</Text>
-              </TouchableOpacity>
-            </View>
-          ))
-        )}
-      </ScrollView>
-
-      {/* Add Guardian Modal */}
-      <Modal visible={modalVisible} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <SafeAreaView style={[styles.modalSheet, { backgroundColor: cardBg }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: textColor }]}>Add Authorized Guardian</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <Ionicons name="close" size={24} color={subColor} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView contentContainerStyle={styles.modalScroll}>
-              {/* Photo Picker */}
-              <TouchableOpacity style={styles.photoPicker} onPress={handlePickPhoto}>
-                {photoUri ? (
-                  <Image source={{ uri: photoUri }} style={styles.pickerImg} />
-                ) : (
-                  <View style={styles.photoPlaceholder}>
-                    <Ionicons name="camera-outline" size={28} color="#10B981" />
-                    <Text style={styles.photoHint}>Attach Photo for Gate Verification</Text>
+              <Text style={styles.emptyTitle}>No trusted people yet</Text>
+              <Text style={styles.emptySub}>
+                Pre-authorize family members or a driver so pickup at the gate is fast and safe.
+              </Text>
+              {STEPS.map((step) => (
+                <View key={step.title} style={styles.stepRow}>
+                  <View style={styles.stepIcon}>
+                    <Ionicons name={step.icon} size={16} color={ACCENT} />
                   </View>
-                )}
-              </TouchableOpacity>
-
-              <Text style={[styles.formLabel, { color: subColor }]}>FULL NAME *</Text>
-              <TextInput
-                style={[styles.formInput, { color: textColor, borderColor }]}
-                placeholder="e.g. Anand Sharma"
-                placeholderTextColor={subColor}
-                value={name}
-                onChangeText={setName}
-              />
-
-              <Text style={[styles.formLabel, { color: subColor }]}>RELATIONSHIP</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.relRow}>
-                {RELATIONSHIPS.map((rel) => {
-                  const isSelected = relationship === rel;
-                  return (
-                    <TouchableOpacity
-                      key={rel}
-                      style={[
-                        styles.relChip,
-                        {
-                          backgroundColor: isSelected ? '#10B981' : 'transparent',
-                          borderColor: isSelected ? '#10B981' : borderColor,
-                        },
-                      ]}
-                      onPress={() => setRelationship(rel)}
-                    >
-                      <Text
-                        style={[
-                          styles.relChipText,
-                          { color: isSelected ? '#FFFFFF' : textColor },
-                        ]}
-                      >
-                        {rel}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-
-              <Text style={[styles.formLabel, { color: subColor }]}>PHONE NUMBER *</Text>
-              <TextInput
-                style={[styles.formInput, { color: textColor, borderColor }]}
-                placeholder="e.g. 9876543210"
-                placeholderTextColor={subColor}
-                keyboardType="phone-pad"
-                value={mobile}
-                onChangeText={setMobile}
-              />
-
-              <Text style={[styles.formLabel, { color: subColor }]}>GOVERNMENT ID (LAST 4 DIGITS)</Text>
-              <TextInput
-                style={[styles.formInput, { color: textColor, borderColor }]}
-                placeholder="e.g. Aadhaar: XXXX-1234"
-                placeholderTextColor={subColor}
-                value={idReference}
-                onChangeText={setIdReference}
-              />
-
-              <TouchableOpacity
-                style={styles.saveBtn}
-                onPress={handleAddGuardian}
-                disabled={submitting}
-              >
-                <LinearGradient
-                  colors={['#059669', '#10B981']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.saveBtnGradient}
-                >
-                  {submitting ? (
-                    <ActivityIndicator color="#FFFFFF" />
-                  ) : (
-                    <Text style={styles.saveBtnText}>Save Guardian</Text>
-                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.stepTitle}>{step.title}</Text>
+                    <Text style={styles.stepCopy}>{step.copy}</Text>
+                  </View>
+                </View>
+              ))}
+              <TouchableOpacity style={styles.addFirstBtn} onPress={openModal} activeOpacity={0.9}>
+                <LinearGradient colors={['#047857', '#10B981']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.addFirstGradient}>
+                  <Ionicons name="add" size={18} color="#FFFFFF" />
+                  <Text style={styles.addFirstBtnText}>Add first person</Text>
                 </LinearGradient>
               </TouchableOpacity>
-            </ScrollView>
-          </SafeAreaView>
-        </View>
-      </Modal>
-    </SafeAreaView>
+            </Animated.View>
+          ) : (
+            guardians.map((g, index) => (
+              <Animated.View
+                key={g.id}
+                entering={FadeInDown.delay(Math.min(index, 6) * 40).duration(240)}
+                style={styles.guardianCard}
+              >
+                <View style={styles.guardianRow}>
+                  <View style={styles.avatarWrap}>
+                    {g.photo_url ? (
+                      <Image source={{ uri: g.photo_url }} style={styles.avatarImg} />
+                    ) : (
+                      <Text style={styles.avatarInitial}>{g.name.charAt(0).toUpperCase()}</Text>
+                    )}
+                  </View>
+                  <View style={styles.guardianInfo}>
+                    <View style={styles.nameRow}>
+                      <Text style={styles.guardianName}>{g.name}</Text>
+                      <View style={styles.statusPill}>
+                        <Text style={styles.statusPillText}>{g.status || 'ACTIVE'}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.guardianMeta}>{g.relationship}</Text>
+                    {g.id_reference_masked ? (
+                      <Text style={styles.idMasked}>ID · {g.id_reference_masked}</Text>
+                    ) : null}
+                  </View>
+                </View>
+
+                <View style={styles.actionRow}>
+                  <TouchableOpacity style={styles.actionBtn} onPress={() => callGuardian(g.mobile)}>
+                    <Ionicons name="call-outline" size={15} color={ACCENT} />
+                    <Text style={styles.actionBtnText}>{g.mobile}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.passBtn}
+                    onPress={() => router.push('/Screen/studentPickup' as any)}
+                  >
+                    <Ionicons name="key-outline" size={14} color="#FFFFFF" />
+                    <Text style={styles.passBtnText}>Pickup pass</Text>
+                  </TouchableOpacity>
+                </View>
+              </Animated.View>
+            ))
+          )}
+        </ScrollView>
+
+        <Modal visible={modalVisible} animationType="slide" transparent>
+          <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={() => setModalVisible(false)} />
+            <SafeAreaView style={styles.modalSheet} edges={['bottom']}>
+              <View style={styles.sheetHandle} />
+              <View style={styles.modalHeader}>
+                <View>
+                  <Text style={styles.modalTitle}>Add trusted person</Text>
+                  <Text style={styles.modalSub}>They’ll appear as a quick pick for pickup passes.</Text>
+                </View>
+                <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.closeBtn} accessibilityLabel="Close">
+                  <Ionicons name="close" size={20} color={theme.colors.textMuted} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView contentContainerStyle={styles.modalScroll} keyboardShouldPersistTaps="handled">
+                <TouchableOpacity style={styles.photoPicker} onPress={handlePickPhoto} activeOpacity={0.85}>
+                  {photoUri ? (
+                    <Image source={{ uri: photoUri }} style={styles.pickerImg} />
+                  ) : (
+                    <View style={styles.photoPlaceholder}>
+                      <View style={styles.cameraWell}>
+                        <Ionicons name="camera" size={22} color={ACCENT} />
+                      </View>
+                      <Text style={styles.photoHint}>Add a clear face photo</Text>
+                      <Text style={styles.photoHintSub}>Helps gate security confirm identity</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+
+                <Text style={styles.formLabel}>Full name</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="e.g. Anand Sharma"
+                  placeholderTextColor={theme.colors.textMuted}
+                  value={name}
+                  onChangeText={(t) => {
+                    setName(t);
+                    setFormError(null);
+                  }}
+                />
+
+                <Text style={styles.formLabel}>Relationship</Text>
+                <View style={styles.relWrap}>
+                  {RELATIONSHIPS.map((rel) => {
+                    const isSelected = relationship === rel;
+                    return (
+                      <TouchableOpacity
+                        key={rel}
+                        style={[styles.relChip, isSelected && styles.relChipOn]}
+                        onPress={() => {
+                          Haptics.selectionAsync();
+                          setRelationship(rel);
+                        }}
+                      >
+                        <Text style={[styles.relChipText, isSelected && styles.relChipTextOn]}>{rel}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                <Text style={styles.formLabel}>Phone number</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="10-digit mobile"
+                  placeholderTextColor={theme.colors.textMuted}
+                  keyboardType="phone-pad"
+                  maxLength={13}
+                  value={mobile}
+                  onChangeText={(t) => {
+                    setMobile(t);
+                    setFormError(null);
+                  }}
+                />
+
+                <Text style={styles.formLabel}>ID last 4 digits (optional)</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="e.g. Aadhaar · 1234"
+                  placeholderTextColor={theme.colors.textMuted}
+                  value={idReference}
+                  onChangeText={setIdReference}
+                />
+
+                {formError ? <Text style={styles.formError}>{formError}</Text> : null}
+
+                <TouchableOpacity style={styles.saveBtn} onPress={handleAddGuardian} disabled={submitting} activeOpacity={0.9}>
+                  <LinearGradient colors={['#047857', '#10B981']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.saveBtnGradient}>
+                    {submitting ? (
+                      <ActivityIndicator color="#FFFFFF" />
+                    ) : (
+                      <Text style={styles.saveBtnText}>Save person</Text>
+                    )}
+                  </LinearGradient>
+                </TouchableOpacity>
+              </ScrollView>
+            </SafeAreaView>
+          </KeyboardAvoidingView>
+        </Modal>
+      </SafeAreaView>
+    </ScreenLayout>
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  backButton: { padding: 6 },
-  headerTitleBlock: { flex: 1, marginLeft: 8 },
-  headerTitle: { fontSize: 18, fontWeight: '700' },
-  headerSub: { fontSize: 12 },
-  addButton: {
-    backgroundColor: '#10B981',
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  scrollContent: { padding: 16, paddingBottom: 40 },
-  policyBox: {
-    flexDirection: 'row',
-    gap: 10,
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    marginBottom: 16,
-  },
-  policyText: { fontSize: 12, lineHeight: 17, flex: 1 },
-  centerContainer: { padding: 40, alignItems: 'center' },
-  emptyContainer: { alignItems: 'center', paddingVertical: 40, paddingHorizontal: 24 },
-  emptyTitle: { fontSize: 16, fontWeight: '700', marginTop: 12 },
-  emptySub: { fontSize: 13, textAlign: 'center', marginTop: 6, lineHeight: 18 },
-  addFirstBtn: {
-    backgroundColor: '#10B981',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-    marginTop: 20,
-  },
-  addFirstBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
-  guardianCard: {
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    marginBottom: 12,
-  },
-  guardianRow: { flexDirection: 'row', alignItems: 'center' },
-  avatarWrap: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: 'rgba(16,185,129,0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  avatarImg: { width: '100%', height: '100%' },
-  guardianInfo: { flex: 1, marginLeft: 12 },
-  nameRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  guardianName: { fontSize: 15, fontWeight: '700' },
-  statusPill: {
-    backgroundColor: 'rgba(16,185,129,0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  statusPillText: { color: '#10B981', fontSize: 10, fontWeight: '800' },
-  guardianMeta: { fontSize: 13, marginTop: 2 },
-  idMasked: { fontSize: 11, marginTop: 2 },
-  quickPassBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: 12,
-    paddingTop: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  quickPassText: { color: '#10B981', fontSize: 12, fontWeight: '700' },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalSheet: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '90%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(150,150,150,0.2)',
-  },
-  modalTitle: { fontSize: 17, fontWeight: '700' },
-  modalScroll: { padding: 20 },
-  photoPicker: {
-    alignSelf: 'center',
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 1,
-    borderColor: '#10B981',
-    borderStyle: 'dashed',
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  pickerImg: { width: '100%', height: '100%' },
-  photoPlaceholder: { alignItems: 'center', justifyContent: 'center', padding: 8 },
-  photoHint: { fontSize: 9, color: '#10B981', textAlign: 'center', marginTop: 4, fontWeight: '600' },
-  formLabel: { fontSize: 11, fontWeight: '700', marginTop: 10, marginBottom: 4 },
-  formInput: {
-    height: 44,
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 12,
-    fontSize: 14,
-  },
-  relRow: { flexDirection: 'row', marginVertical: 6 },
-  relChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    borderWidth: 1,
-    marginRight: 8,
-  },
-  relChipText: { fontSize: 12, fontWeight: '600' },
-  saveBtn: { marginTop: 24, borderRadius: 12, overflow: 'hidden' },
-  saveBtnGradient: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-  },
-  saveBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
-});
+function createStyles(
+  isDark: boolean,
+  colors: { background: string; textStrong: string; textMuted: string },
+) {
+  const cardBg = isDark ? '#161E2E' : '#FFFFFF';
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: colors.background },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingTop: 8,
+      paddingBottom: 10,
+      gap: 10,
+    },
+    backButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#FFFFFF',
+    },
+    headerTitleBlock: { flex: 1 },
+    headerTitle: { fontSize: 22, fontWeight: '800', letterSpacing: -0.4, color: colors.textStrong },
+    headerSub: { fontSize: 13, fontWeight: '600', color: colors.textMuted, marginTop: 1 },
+    addButton: {
+      backgroundColor: ACCENT,
+      width: 40,
+      height: 40,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    scrollContent: { padding: 16, paddingBottom: 48 },
+    policyBox: {
+      ...clayCard(isDark, 'sm'),
+      flexDirection: 'row',
+      gap: 12,
+      alignItems: 'center',
+      padding: 14,
+      borderRadius: 20,
+      marginBottom: 16,
+    },
+    policyIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 14,
+      backgroundColor: schoolColorWithAlpha(ACCENT, isDark ? 0.2 : 0.12),
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    policyTitle: { fontSize: 14, fontWeight: '800', color: colors.textStrong },
+    policyText: { fontSize: 12, lineHeight: 17, marginTop: 2, color: colors.textMuted },
+    centerContainer: { padding: 48, alignItems: 'center', gap: 10 },
+    loadingLabel: { fontSize: 13, fontWeight: '600', color: colors.textMuted },
+    emptyContainer: { alignItems: 'center', paddingTop: 12, paddingHorizontal: 4 },
+    emptyIconWell: {
+      width: 76,
+      height: 76,
+      borderRadius: 26,
+      backgroundColor: schoolColorWithAlpha(ACCENT, isDark ? 0.18 : 0.1),
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 16,
+    },
+    emptyTitle: { fontSize: 20, fontWeight: '800', letterSpacing: -0.3, color: colors.textStrong, textAlign: 'center' },
+    emptySub: { fontSize: 14, textAlign: 'center', marginTop: 8, lineHeight: 21, color: colors.textMuted, marginBottom: 20, maxWidth: 320 },
+    stepRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      width: '100%',
+      paddingVertical: 10,
+      paddingHorizontal: 8,
+    },
+    stepIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: 12,
+      backgroundColor: schoolColorWithAlpha(ACCENT, isDark ? 0.16 : 0.1),
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    stepTitle: { fontSize: 14, fontWeight: '800', color: colors.textStrong },
+    stepCopy: { fontSize: 12, color: colors.textMuted, marginTop: 1 },
+    addFirstBtn: { marginTop: 16, width: '100%', borderRadius: 16, overflow: 'hidden' },
+    addFirstGradient: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      paddingVertical: 14,
+    },
+    addFirstBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 15 },
+    guardianCard: {
+      ...clayCard(isDark, 'sm'),
+      borderRadius: 20,
+      padding: 14,
+      marginBottom: 12,
+    },
+    guardianRow: { flexDirection: 'row', alignItems: 'center' },
+    avatarWrap: {
+      width: 56,
+      height: 56,
+      borderRadius: 18,
+      backgroundColor: schoolColorWithAlpha(ACCENT, 0.12),
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+    },
+    avatarImg: { width: '100%', height: '100%' },
+    avatarInitial: { fontSize: 20, fontWeight: '800', color: ACCENT },
+    guardianInfo: { flex: 1, marginLeft: 12 },
+    nameRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+    guardianName: { fontSize: 16, fontWeight: '800', color: colors.textStrong, flex: 1 },
+    statusPill: {
+      backgroundColor: schoolColorWithAlpha(ACCENT, 0.14),
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 8,
+    },
+    statusPillText: { color: ACCENT, fontSize: 10, fontWeight: '800' },
+    guardianMeta: { fontSize: 13, marginTop: 3, color: colors.textMuted, fontWeight: '600' },
+    idMasked: { fontSize: 11, marginTop: 2, color: colors.textMuted },
+    actionRow: { flexDirection: 'row', gap: 8, marginTop: 14 },
+    actionBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      height: 42,
+      borderRadius: 12,
+      backgroundColor: schoolColorWithAlpha(ACCENT, isDark ? 0.16 : 0.1),
+    },
+    actionBtnText: { color: ACCENT, fontSize: 12, fontWeight: '800' },
+    passBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      height: 42,
+      paddingHorizontal: 14,
+      borderRadius: 12,
+      backgroundColor: ACCENT,
+    },
+    passBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(15,23,42,0.45)',
+      justifyContent: 'flex-end',
+    },
+    modalSheet: {
+      backgroundColor: cardBg,
+      borderTopLeftRadius: 28,
+      borderTopRightRadius: 28,
+      maxHeight: '92%',
+    },
+    sheetHandle: {
+      alignSelf: 'center',
+      width: 40,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.16)' : 'rgba(15,23,42,0.12)',
+      marginTop: 10,
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      paddingHorizontal: 20,
+      paddingTop: 14,
+      paddingBottom: 8,
+    },
+    modalTitle: { fontSize: 18, fontWeight: '800', color: colors.textStrong, letterSpacing: -0.3 },
+    modalSub: { fontSize: 12, color: colors.textMuted, marginTop: 3, maxWidth: 260 },
+    closeBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F1F5F9',
+    },
+    modalScroll: { padding: 20, paddingBottom: 32 },
+    photoPicker: {
+      alignSelf: 'center',
+      width: 148,
+      height: 148,
+      borderRadius: 28,
+      overflow: 'hidden',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 8,
+      backgroundColor: schoolColorWithAlpha(ACCENT, isDark ? 0.14 : 0.08),
+      borderWidth: 1.5,
+      borderColor: schoolColorWithAlpha(ACCENT, 0.28),
+      borderStyle: 'dashed',
+    },
+    pickerImg: { width: '100%', height: '100%' },
+    photoPlaceholder: { alignItems: 'center', justifyContent: 'center', padding: 12 },
+    cameraWell: {
+      width: 44,
+      height: 44,
+      borderRadius: 16,
+      backgroundColor: isDark ? 'rgba(16,185,129,0.2)' : '#FFFFFF',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 8,
+    },
+    photoHint: { fontSize: 13, color: ACCENT, textAlign: 'center', fontWeight: '800' },
+    photoHintSub: { fontSize: 11, color: colors.textMuted, textAlign: 'center', marginTop: 2 },
+    formLabel: {
+      fontSize: 11,
+      fontWeight: '800',
+      letterSpacing: 0.4,
+      textTransform: 'uppercase',
+      color: colors.textMuted,
+      marginTop: 14,
+      marginBottom: 6,
+    },
+    formInput: {
+      ...clayInset(isDark),
+      height: 48,
+      borderRadius: 14,
+      paddingHorizontal: 14,
+      fontSize: 15,
+      fontWeight: '600',
+      color: colors.textStrong,
+    },
+    relWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    relChip: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 12,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F1F5F9',
+    },
+    relChipOn: { backgroundColor: ACCENT },
+    relChipText: { fontSize: 12, fontWeight: '700', color: colors.textStrong },
+    relChipTextOn: { color: '#FFFFFF' },
+    formError: { marginTop: 12, color: '#DC2626', fontWeight: '700', fontSize: 13 },
+    saveBtn: { marginTop: 22, borderRadius: 16, overflow: 'hidden' },
+    saveBtnGradient: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 15,
+    },
+    saveBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
+  });
+}

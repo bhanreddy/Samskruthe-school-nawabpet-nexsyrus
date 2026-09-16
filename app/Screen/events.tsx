@@ -1,20 +1,72 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import ScreenLayout from '@/src/components/ScreenLayout';
+import StudentSubpageHeader from '@/src/components/StudentSubpageHeader';
 import { useTheme } from '@/src/hooks/useTheme';
 import { eventService, type EventItem } from '@/src/services/eventService';
 import { useAuth } from '@/src/hooks/useAuth';
+import { clayCard } from '@/src/theme/clayStyles';
+import { getEventTypeConfig, formatEventDateRange } from '@/src/components/calendar/CalendarTheme';
+import * as Haptics from '@/src/utils/haptics';
+import LogoLoader from '@/src/components/LogoLoader';
+
+type Filter = 'upcoming' | 'all';
+
+const LIVE_STATUSES = new Set([
+  'PUBLISHED',
+  'SCHEDULED',
+  'REGISTRATION_OPEN',
+  'APPROVED',
+  'ONGOING',
+]);
+
+function statusMeta(status?: string) {
+  const value = (status || '').toUpperCase();
+  if (value === 'ONGOING') return { label: 'Happening now', color: '#059669', bg: '#ECFDF5' };
+  if (value === 'REGISTRATION_OPEN') return { label: 'Open to join', color: '#4F46E5', bg: '#EEF2FF' };
+  if (value === 'COMPLETED' || value === 'CLOSED') return { label: 'Completed', color: '#64748B', bg: '#F1F5F9' };
+  if (value === 'CANCELLED') return { label: 'Cancelled', color: '#DC2626', bg: '#FEF2F2' };
+  return { label: 'Upcoming', color: '#2563EB', bg: '#EFF6FF' };
+}
+
+function countdown(startDate?: string) {
+  if (!startDate) return '';
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const eventDate = new Date(`${startDate}T00:00:00`);
+  if (Number.isNaN(eventDate.getTime())) return '';
+  const diff = Math.round((eventDate.getTime() - today.getTime()) / 86400000);
+  if (diff === 0) return 'Today';
+  if (diff === 1) return 'Tomorrow';
+  if (diff > 1 && diff <= 14) return `In ${diff} days`;
+  if (diff < 0 && diff >= -1) return 'Yesterday';
+  return '';
+}
 
 export default function ParentEventsScreen() {
   const router = useRouter();
-  const { isDark } = useTheme();
+  const { theme, isDark } = useTheme();
   const { student } = useAuth() as any;
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [events, setEvents] = useState<EventItem[]>([]);
+  const [filter, setFilter] = useState<Filter>('upcoming');
 
-  const load = useCallback(async () => {
+  const styles = useMemo(() => createStyles(isDark, theme.colors), [isDark, theme.colors]);
+
+  const load = useCallback(async (refresh = false) => {
+    if (refresh) setRefreshing(true);
+    else setLoading(true);
     try {
       const res = await eventService.listEligibleEvents();
       setEvents(res.data || []);
@@ -23,65 +75,274 @@ export default function ParentEventsScreen() {
       setEvents(fallback.data || []);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
-  const bg = isDark ? '#090D16' : '#F8FAFC';
-  const cardBg = isDark ? '#111827' : '#FFFFFF';
-  const textCol = isDark ? '#F9FAFB' : '#0F172A';
-  const subCol = isDark ? '#9CA3AF' : '#64748B';
+  const upcomingCount = useMemo(
+    () => events.filter((ev) => LIVE_STATUSES.has((ev.status || '').toUpperCase())).length,
+    [events],
+  );
+
+  const visible = useMemo(() => {
+    const list = filter === 'upcoming'
+      ? events.filter((ev) => LIVE_STATUSES.has((ev.status || '').toUpperCase()))
+      : events;
+    return [...list].sort((a, b) => String(a.start_date || '').localeCompare(String(b.start_date || '')));
+  }, [events, filter]);
 
   return (
-    <SafeAreaView style={[styles.root, { backgroundColor: bg }]} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={20} color={textCol} />
-        </TouchableOpacity>
-        <Text style={[styles.title, { color: textCol }]}>School Events</Text>
-        <View style={{ width: 40 }} />
-      </View>
-      {loading ? (
-        <ActivityIndicator color="#4F46E5" style={{ marginTop: 40 }} />
-      ) : (
-        <ScrollView refreshControl={<RefreshControl refreshing={false} onRefresh={load} />}>
-          {events.length === 0 ? (
-            <Text style={[styles.empty, { color: subCol }]}>No published events right now.</Text>
-          ) : (
-            events.map((ev) => (
+    <ScreenLayout>
+      <View style={styles.root}>
+        <StudentSubpageHeader
+          title="School Events"
+          subtitle="Trips, celebrations, and campus days"
+          onBack={() => router.back()}
+        />
+
+        <View style={styles.filters}>
+          {([
+            { key: 'upcoming' as Filter, label: 'Upcoming', count: upcomingCount },
+            { key: 'all' as Filter, label: 'All events', count: events.length },
+          ]).map((tab) => {
+            const on = filter === tab.key;
+            return (
               <TouchableOpacity
-                key={ev.id}
-                style={[styles.card, { backgroundColor: cardBg }]}
-                onPress={() =>
-                  router.push({
-                    pathname: '/Screen/eventDetails',
-                    params: { id: ev.id, studentId: student?.id || '' },
-                  } as any)
-                }
+                key={tab.key}
+                style={[styles.chip, on && styles.chipOn]}
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  setFilter(tab.key);
+                }}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: on }}
               >
-                <Text style={[styles.cardTitle, { color: textCol }]}>{ev.title}</Text>
-                <Text style={[styles.cardMeta, { color: subCol }]}>
-                  {ev.start_date} • {ev.location || 'Campus'} • {ev.status}
-                </Text>
+                <Text style={[styles.chipText, on && styles.chipTextOn]}>{tab.label}</Text>
+                <View style={[styles.count, on && styles.countOn]}>
+                  <Text style={[styles.countText, on && styles.countTextOn]}>{tab.count}</Text>
+                </View>
               </TouchableOpacity>
-            ))
-          )}
-        </ScrollView>
-      )}
-    </SafeAreaView>
+            );
+          })}
+        </View>
+
+        {loading ? (
+          <View style={styles.loader}>
+            <LogoLoader size={72} />
+            <Text style={styles.loaderLabel}>Finding events for you…</Text>
+          </View>
+        ) : (
+          <ScrollView
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={theme.colors.primary} />
+            }
+            contentContainerStyle={styles.list}
+            showsVerticalScrollIndicator={false}
+          >
+            {visible.length === 0 ? (
+              <Animated.View entering={FadeIn.duration(280)} style={styles.empty}>
+                <View style={styles.emptyIcon}>
+                  <Ionicons name="calendar-outline" size={30} color={theme.colors.primary} />
+                </View>
+                <Text style={styles.emptyTitle}>
+                  {filter === 'upcoming' ? 'Nothing on the calendar yet' : 'No published events'}
+                </Text>
+                <Text style={styles.emptyCopy}>
+                  {filter === 'upcoming'
+                    ? 'Upcoming school events, trips, and celebrations will show up here as soon as they are published.'
+                    : 'When the school publishes an event, you’ll see date, venue, and any consent or pass details here.'}
+                </Text>
+              </Animated.View>
+            ) : (
+              visible.map((ev, index) => {
+                const type = getEventTypeConfig(ev.event_type || ev.category);
+                const status = statusMeta(ev.status);
+                const when = countdown(ev.start_date);
+                return (
+                  <Animated.View key={ev.id} entering={FadeInDown.delay(Math.min(index, 6) * 40).duration(260)}>
+                    <TouchableOpacity
+                      style={styles.card}
+                      onPress={() => {
+                        Haptics.selectionAsync();
+                        router.push({
+                          pathname: '/Screen/eventDetails',
+                          params: { id: ev.id, studentId: student?.id || '' },
+                        } as any);
+                      }}
+                      activeOpacity={0.84}
+                      accessibilityRole="button"
+                      accessibilityLabel={ev.title}
+                    >
+                      <View style={[styles.accent, { backgroundColor: type.color }]} />
+                      <View
+                        style={[
+                          styles.iconBox,
+                          { backgroundColor: isDark ? type.bgDark : type.bgLight },
+                        ]}
+                      >
+                        <Ionicons name={type.icon as any} size={18} color={type.color} />
+                      </View>
+                      <View style={styles.body}>
+                        <View style={styles.titleRow}>
+                          <Text style={styles.cardTitle} numberOfLines={2}>{ev.title}</Text>
+                          <Ionicons name="chevron-forward" size={16} color={theme.colors.textMuted} />
+                        </View>
+                        <Text style={styles.cardMeta} numberOfLines={1}>
+                          {formatEventDateRange(ev.start_date, ev.end_date, ev.is_all_day)}
+                          {ev.location ? `  ·  ${ev.location}` : '  ·  Campus'}
+                        </Text>
+                        <View style={styles.chipRow}>
+                          <View style={[styles.typeChip, { backgroundColor: isDark ? type.bgDark : type.bgLight }]}>
+                            <Text style={[styles.typeChipText, { color: type.color }]}>{type.label}</Text>
+                          </View>
+                          <View style={[styles.statusChip, { backgroundColor: isDark ? `${status.color}22` : status.bg }]}>
+                            <Text style={[styles.statusChipText, { color: status.color }]}>{status.label}</Text>
+                          </View>
+                          {when ? (
+                            <View style={styles.whenChip}>
+                              <Text style={styles.whenChipText}>{when}</Text>
+                            </View>
+                          ) : null}
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  </Animated.View>
+                );
+              })
+            )}
+          </ScrollView>
+        )}
+      </View>
+    </ScreenLayout>
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
-  backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  title: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '800' },
-  empty: { textAlign: 'center', marginTop: 48 },
-  card: { marginHorizontal: 16, marginBottom: 12, padding: 16, borderRadius: 16 },
-  cardTitle: { fontSize: 16, fontWeight: '700' },
-  cardMeta: { marginTop: 6, fontSize: 13 },
-});
+function createStyles(
+  isDark: boolean,
+  colors: { background: string; textStrong: string; textMuted: string; primary: string; text: string },
+) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: colors.background },
+    filters: {
+      flexDirection: 'row',
+      marginHorizontal: 16,
+      marginBottom: 8,
+      padding: 4,
+      gap: 4,
+      borderRadius: 16,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(15,23,42,0.045)',
+    },
+    chip: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: 42,
+      borderRadius: 12,
+      gap: 8,
+    },
+    chipOn: { backgroundColor: isDark ? 'rgba(79,70,229,0.28)' : '#FFFFFF' },
+    chipText: { fontSize: 13, fontWeight: '800', color: colors.textMuted },
+    chipTextOn: { color: isDark ? '#F8FAFC' : colors.textStrong },
+    count: {
+      minWidth: 22,
+      height: 22,
+      paddingHorizontal: 6,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.06)',
+    },
+    countOn: { backgroundColor: colors.primary },
+    countText: { fontSize: 11, fontWeight: '800', color: isDark ? '#E2E8F0' : '#334155' },
+    countTextOn: { color: '#FFFFFF' },
+    loader: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 80, gap: 12 },
+    loaderLabel: { fontSize: 13, fontWeight: '600', color: colors.textMuted },
+    list: { padding: 16, paddingBottom: 48, gap: 12, flexGrow: 1 },
+    empty: { alignItems: 'center', paddingTop: 72, paddingHorizontal: 28, gap: 8 },
+    emptyIcon: {
+      width: 72,
+      height: 72,
+      borderRadius: 26,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 6,
+      backgroundColor: isDark ? 'rgba(79,70,229,0.18)' : '#EEF2FF',
+    },
+    emptyTitle: {
+      fontSize: 20,
+      fontWeight: '800',
+      color: colors.textStrong,
+      textAlign: 'center',
+      letterSpacing: -0.3,
+    },
+    emptyCopy: {
+      fontSize: 14,
+      lineHeight: 21,
+      color: colors.textMuted,
+      textAlign: 'center',
+      maxWidth: 300,
+    },
+    card: {
+      ...clayCard(isDark, 'sm'),
+      flexDirection: 'row',
+      alignItems: 'stretch',
+      paddingVertical: 12,
+      paddingRight: 12,
+      paddingLeft: 0,
+      borderRadius: 20,
+    },
+    accent: {
+      width: 5,
+      borderTopLeftRadius: 20,
+      borderBottomLeftRadius: 20,
+      marginRight: 12,
+    },
+    iconBox: {
+      width: 40,
+      height: 40,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 2,
+    },
+    body: { flex: 1, minWidth: 0, marginLeft: 10 },
+    titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+    cardTitle: {
+      flex: 1,
+      fontSize: 16,
+      fontWeight: '800',
+      letterSpacing: -0.25,
+      color: colors.textStrong,
+      lineHeight: 21,
+    },
+    cardMeta: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.textMuted,
+      marginTop: 4,
+    },
+    chipRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      gap: 6,
+      marginTop: 8,
+    },
+    typeChip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+    typeChipText: { fontSize: 10, fontWeight: '800' },
+    statusChip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+    statusChipText: { fontSize: 10, fontWeight: '800' },
+    whenChip: {
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 8,
+      backgroundColor: isDark ? 'rgba(79,70,229,0.18)' : '#EEF2FF',
+    },
+    whenChipText: { fontSize: 10, fontWeight: '800', color: '#4F46E5' },
+  });
+}

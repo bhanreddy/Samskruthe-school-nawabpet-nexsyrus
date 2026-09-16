@@ -42,6 +42,8 @@ export interface Anecdote {
   student_photo_url?: string;
   admission_no?: string;
   student_admission_no?: string;
+  class_name?: string;
+  section_name?: string;
   title?: string;
   observation_text: string;
   context: 'classroom' | 'playground' | 'laboratory' | 'corridor' | 'sports_field' | 'bus' | 'cafeteria' | 'assembly' | 'online' | 'other';
@@ -112,6 +114,7 @@ export const AnecdoteService = {
     student_id?: string;
     class_section_id?: string;
     category_id?: string;
+    category_code?: string;
     observation_type?: string;
     sentiment?: string;
     severity?: string;
@@ -130,6 +133,7 @@ export const AnecdoteService = {
     if (params.student_id) query.set('student_id', params.student_id);
     if (params.class_section_id) query.set('class_section_id', params.class_section_id);
     if (params.category_id) query.set('category_id', params.category_id);
+    if (params.category_code) query.set('category_code', params.category_code);
     if (params.observation_type) query.set('observation_type', params.observation_type);
     if (params.sentiment) query.set('sentiment', params.sentiment);
     if (params.severity) query.set('severity', params.severity);

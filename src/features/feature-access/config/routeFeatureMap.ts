@@ -18,6 +18,8 @@ export const ROUTE_FEATURE_MAP: Record<string, FeatureKey> = {
 
   // OMR Scanner
   '/admin/omr': FEATURE_KEYS.OMR_SCANNER,
+  '/accounts/omr-print': FEATURE_KEYS.OMR_SCANNER,
+  '/accounts/omr-answer-key': FEATURE_KEYS.OMR_SCANNER,
 
   // Visitor Management
   '/admin/visitors': FEATURE_KEYS.VISITOR_MANAGEMENT,

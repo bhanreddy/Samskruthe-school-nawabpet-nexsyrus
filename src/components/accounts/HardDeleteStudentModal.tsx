@@ -29,7 +29,7 @@ interface Props {
 
 const WIPED_ITEMS = [
   'Profile, login account & parent links',
-  'All fee records, receipts & transactions',
+  'All fee records, receipts, transactions & fines',
   'Marks, exam results & attendance history',
   'Transport, hostel & certificate records',
   'Program progress & every other linked record',
@@ -212,6 +212,9 @@ export default function HardDeleteStudentModal({
                       <Text style={[s.amountText, { color: theme.colors.textSecondary }]}>Assigned fee total: {formatINR(preview.total_due - preview.total_discount)}</Text>
                       <Text style={[s.amountText, { color: theme.colors.textSecondary }]}>Assigned fee paid: {formatINR(preview.total_paid)}</Text>
                       <Text style={[s.amountBalance, { color: danger }]}>Assigned fee balance: {formatINR(preview.balance)}</Text>
+                      {Number(preview.fine_count ?? 0) > 0 && (
+                        <Text style={[s.amountText, { color: theme.colors.textSecondary }]}>Fines: {preview.fine_count}</Text>
+                      )}
                       {preview.related_financial_record_count > 0 && (
                         <Text style={[s.amountText, { color: theme.colors.textSecondary }]}>Other financial records: {preview.related_financial_record_count}</Text>
                       )}
@@ -219,7 +222,7 @@ export default function HardDeleteStudentModal({
 
                     <View style={[s.feeToggleRow, { borderTopColor: isDark ? 'rgba(234,88,12,0.25)' : '#FED7AA' }]}>
                       <View style={{ flex: 1, paddingRight: 12 }}>
-                        <Text style={[s.feeToggleTitle, { color: theme.colors.textStrong }]}>Delete fee and payment records</Text>
+                        <Text style={[s.feeToggleTitle, { color: theme.colors.textStrong }]}>Delete fee, fine and payment records</Text>
                         <Text style={[s.feeToggleCopy, { color: theme.colors.textSecondary }]}>Off by default. Turn this on to allow permanent deletion.</Text>
                       </View>
                       <Switch

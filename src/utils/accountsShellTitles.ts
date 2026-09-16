@@ -15,6 +15,8 @@ const EXACT: Record<string, string> = {
   '/accounts/invoices': 'Invoices',
   '/accounts/marks': 'School Marks Export',
   '/accounts/exams': 'Exams',
+  '/accounts/omr-answer-key': 'OMR Answer Keys',
+  '/accounts/omr-print': 'Print OMR Sheets',
   '/accounts/certificate-generator': 'Certificates',
   '/accounts/expenses': 'Expense Tracker',
   '/accounts/payroll': 'Payroll',

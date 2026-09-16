@@ -4,7 +4,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Haptics from '../utils/haptics';
 import { notificationInboxService, type InboxNotification } from '../services/notificationInboxService';
-import { resolveNotificationRoute } from '../hooks/useNotificationObserver';
+import { pushNotificationRoute, resolveNotificationRoute } from '../utils/notificationRoutes';
+import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
 
 function formatRelative(input: string): string {
@@ -28,6 +29,7 @@ type Props = {
 
 export default function NotificationInboxList({ onSendPress }: Props) {
   const router = useRouter();
+  const { role } = useAuth();
   const { theme, isDark } = useTheme();
   const [items, setItems] = useState<InboxNotification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,9 +63,12 @@ export default function NotificationInboxList({ onSendPress }: Props) {
       : entry));
     void notificationInboxService.markRead(item.id);
 
-    const route = resolveNotificationRoute({ type: item.type || '', deepLink: item.actionUrl || '' });
-    if (route) router.push(route as any);
-  }, [router]);
+    const resolved = resolveNotificationRoute(
+      { type: item.type || '', deepLink: item.actionUrl || '' },
+      role,
+    );
+    pushNotificationRoute(router, resolved);
+  }, [role, router]);
 
   const surface = isDark ? 'rgba(255,255,255,0.06)' : '#FFFFFF';
   const border = isDark ? 'rgba(255,255,255,0.10)' : 'rgba(15,23,42,0.08)';

@@ -19,16 +19,17 @@ import { useTheme } from '@/src/hooks/useTheme';
 import { SCHOOL_ID } from '@/src/constants/school';
 import { getHomeRouteForRole } from '@/src/utils/portalRoutes';
 import { isStudentRole, isStaffPortalRole } from '@/src/utils/roleHelpers';
-import { parseSchoolIMSLoginQr } from '@/src/features/student-login-qr/qrPayload';
+import { extractScannedLoginQrText, parseSchoolIMSLoginQr, QrPayloadError } from '@/src/features/student-login-qr/qrPayload';
 import { createQrScanGate } from '@/src/features/student-login-qr/qrScanGate';
 import { LOGIN_QR_USER_ERRORS, messageForQrLoginFailure } from '@/src/features/student-login-qr/qrLoginErrors';
+import { APIError } from '@/src/services/apiClient';
 import { useTranslation } from 'react-i18next';
 
 type ScannerState =
   | 'requesting_permission'
   | 'denied'
   | 'scanning'
-  | 'processing'
+  | 'validating'
   | 'error';
 
 export default function QrLoginScannerScreen() {
@@ -44,44 +45,55 @@ export default function QrLoginScannerScreen() {
   const [error, setError] = useState('');
   const [statusText, setStatusText] = useState('');
   const scanGate = useRef(createQrScanGate(1500));
+  const validatingRef = useRef(false);
 
   useEffect(() => {
     if (!permission) setState('requesting_permission');
     else if (!permission.granted) setState('denied');
-    else setState((current) => (current === 'error' || current === 'processing' ? current : 'scanning'));
+    else setState((current) => (current === 'error' || current === 'validating' ? current : 'scanning'));
   }, [permission]);
 
   useEffect(() => () => {
     scanGate.current.reset();
+    validatingRef.current = false;
   }, []);
 
   const resetScanner = useCallback(() => {
     scanGate.current.reset();
+    validatingRef.current = false;
     setError('');
     setStatusText('');
     setState('scanning');
   }, []);
 
-  const onBarcodeScanned = useCallback(async ({ data }: BarcodeScanningResult) => {
-    if (state !== 'scanning' || !scanGate.current.tryAcquire()) return;
-    setState('processing');
-    setStatusText(t('qrLogin.validating', 'Validating login QR…'));
+  const onBarcodeScanned = useCallback(async (scan: BarcodeScanningResult) => {
+    if (state !== 'scanning' || validatingRef.current || !scanGate.current.tryAcquire()) return;
+    validatingRef.current = true;
+    setState('validating');
+    setStatusText(t('qrLogin.verifying', 'Verifying secure login…'));
 
     try {
-      const parsed = parseSchoolIMSLoginQr(data);
+      const scannedText = extractScannedLoginQrText(scan);
+      const parsed = parseSchoolIMSLoginQr(scannedText);
       if (String(parsed.schoolId) !== String(SCHOOL_ID)) {
-        throw new Error(LOGIN_QR_USER_ERRORS.INVALID);
+        throw new QrPayloadError('QR_SCHOOL_MISMATCH');
       }
-      const network = await NetInfo.fetch();
-      if (!network.isConnected || network.isInternetReachable === false) {
-        throw new Error(LOGIN_QR_USER_ERRORS.NETWORK);
+      try {
+        const network = await NetInfo.fetch();
+        if (network.isConnected === false) {
+          throw new APIError(LOGIN_QR_USER_ERRORS.NETWORK, 0, undefined, undefined, 'NETWORK_ERROR');
+        }
+      } catch (networkError) {
+        if (networkError instanceof APIError) throw networkError;
       }
-      setStatusText(t('qrLogin.signingIn', 'Signing you in securely…'));
       const result = isAddMode
-        ? await addAccountWithQr(data)
-        : await signInWithQr(data);
+        ? await addAccountWithQr(scannedText)
+        : await signInWithQr(scannedText);
       if (result.error || !result.session) {
-        throw new Error(result.error || LOGIN_QR_USER_ERRORS.EXPIRED);
+        const failure = Object.assign(new Error(result.error || LOGIN_QR_USER_ERRORS.UNAVAILABLE), {
+          code: (result as { code?: string }).code || 'UNKNOWN_ERROR',
+        });
+        throw failure;
       }
       let user = result.session.validatedUser;
       if (isAddMode) {
@@ -98,6 +110,7 @@ export default function QrLoginScannerScreen() {
     } catch (caught) {
       setError(messageForQrLoginFailure(caught));
       setState('error');
+      validatingRef.current = false;
       scanGate.current.release();
     }
   }, [addAccountWithQr, isAddMode, router, signInWithQr, state, switchAccount, t]);
@@ -166,8 +179,11 @@ export default function QrLoginScannerScreen() {
         <View style={styles.frame}>
           <View style={[styles.corner, styles.topLeft]} /><View style={[styles.corner, styles.topRight]} />
           <View style={[styles.corner, styles.bottomLeft]} /><View style={[styles.corner, styles.bottomRight]} />
-          {state === 'processing' ? (
-            <View style={styles.processing}><ActivityIndicator size="large" color="#FFFFFF" /><Text style={styles.processingText}>{statusText || t('qrLogin.signingIn', 'Signing you in securely…')}</Text></View>
+          {state === 'validating' ? (
+            <View style={styles.processing}>
+              <ActivityIndicator size="large" color="#FFFFFF" />
+              <Text style={styles.processingText}>{statusText || t('qrLogin.verifying', 'Verifying secure login…')}</Text>
+            </View>
           ) : null}
         </View>
 

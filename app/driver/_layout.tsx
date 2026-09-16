@@ -49,6 +49,10 @@ export default function DriverLayout() {
                 name="updates"
                 options={{ title: 'Updates', swipeEnabled: false, lazy: true } as any}
             />
+            <MaterialTopTabs.Screen
+                name="calendar"
+                options={{ title: 'Calendar', swipeEnabled: false, lazy: true, headerShown: false } as any}
+            />
         </MaterialTopTabs>
     );
 }

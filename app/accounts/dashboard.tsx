@@ -2334,6 +2334,7 @@ export default function AccountsDashboard() {
     { id: 'hostel_students', title: 'Hostel students', description: 'Assign, move or vacate', icon: 'bed', route: '/accounts/hostel', library: Ionicons, permission: 'hostel.allocate', group: 'people' },
     { id: 'invoices', title: 'Invoices', description: 'Generate and track bills', icon: 'document-text', route: '/accounts/invoices', library: Ionicons, group: 'collections' },
     { id: 'exams', title: 'Exams', description: 'Timetables, tickets, results', icon: 'clipboard-outline', route: '/accounts/exams', library: Ionicons, group: 'academic' },
+    { id: 'omr_print', title: 'Print OMR sheets', description: 'Scanner-ready bubble sheets', icon: 'print-outline', route: '/accounts/omr-print', library: Ionicons, permission: 'omr.view', group: 'academic' },
     { id: 'marks_export', title: 'Marks export', description: 'Download every class', icon: 'download-outline', route: '/accounts/marks', library: Ionicons, group: 'academic' },
     { id: 'certificates', title: 'Certificates', description: 'Issue TC & Bonafide', icon: 'ribbon', route: '/accounts/certificate-generator', library: Ionicons, permission: 'certificates.issue', group: 'academic' },
   ] as QuickActionItem[]).filter((action) => !action.permission || hasPermission(action.permission)), [hasPermission]);

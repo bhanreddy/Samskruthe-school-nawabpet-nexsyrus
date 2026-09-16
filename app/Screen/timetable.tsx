@@ -1,15 +1,14 @@
 import { Redirect } from 'expo-router';
+import { useAuth } from '@/src/hooks/useAuth';
+import { resolveNotificationRoute, toNotificationHref } from '@/src/utils/notificationRoutes';
 
 /**
- * `/Screen/timetable` is the deep-link target for TIMETABLE_UPDATED pushes and
- * the legacy `/student/timetable` alias. The real student timetable lives at
- * `/(tabs)/timetable` (correct data source: the student's class slots, with
- * real period times and lunch/break rows). This screen previously duplicated
- * that view with hardcoded period times and the wrong data source
- * (getTeacherTimetable), so it showed no breaks and "No timetable found" for
- * students. Redirect to the canonical screen instead of maintaining a
- * divergent copy.
+ * `/Screen/timetable` is the historical deep-link for TIMETABLE_UPDATED.
+ * The real student timetable lives at `/(tabs)/timetable`. Other logins have
+ * their own timetable screens — never bounce them into the student tab layout.
  */
 export default function TimetableRedirect() {
-  return <Redirect href="/(tabs)/timetable" />;
+  const { role } = useAuth();
+  const href = toNotificationHref(resolveNotificationRoute({ type: 'TIMETABLE_UPDATED' }, role));
+  return <Redirect href={href as any} />;
 }

@@ -109,6 +109,7 @@ export interface StudentHardDeletePreview {
     payment_transaction_count: number;
     receipt_count: number;
     related_financial_record_count: number;
+    fine_count: number;
     total_due: number;
     total_discount: number;
     total_paid: number;

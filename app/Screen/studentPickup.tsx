@@ -1,46 +1,65 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  TextInput,
   TouchableOpacity,
   ActivityIndicator,
   Alert,
   Share,
   Platform,
   Image,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import QRCode from 'react-native-qrcode-svg';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import AppTextInput from '@/src/components/AppTextInput';
+import { styles as themeStyles } from '@/src/theme/styles';
+import ScreenLayout from '@/src/components/ScreenLayout';
+import StudentSubpageHeader from '@/src/components/StudentSubpageHeader';
 import * as Haptics from '@/src/utils/haptics';
 import { useAuth } from '@/src/hooks/useAuth';
 import { useTheme } from '@/src/hooks/useTheme';
+import { clayCard, clayInset } from '@/src/theme/clayStyles';
+import { schoolColorWithAlpha } from '@/src/constants/schoolConfig';
 import {
   visitorService,
   type AuthorizedGuardian,
   type PickupAuthorization,
 } from '@/src/services/visitorService';
 
+const ACCENT = '#059669';
+const RELATIONSHIPS = ['Parent', 'Father', 'Mother', 'Grandparent', 'Uncle', 'Aunt', 'Family Driver', 'Other'];
+
+function formatWindow(start?: string, end?: string) {
+  return [start, end].filter(Boolean).join(' – ');
+}
+
+function formatPickupDate(value?: string) {
+  if (!value) return '';
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
 export default function StudentPickupScreen() {
   const router = useRouter();
-  const { user, portalContexts } = useAuth();
-  const { isDark } = useTheme();
+  const { portalContexts } = useAuth();
+  const { theme, isDark } = useTheme();
 
   const [activeTab, setActiveTab] = useState<'request' | 'active'>('request');
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
 
-  // Guardians & Student Pickups
   const [guardians, setGuardians] = useState<AuthorizedGuardian[]>([]);
   const [selectedGuardianId, setSelectedGuardianId] = useState<string | null>(null);
   const [activePickups, setActivePickups] = useState<PickupAuthorization[]>([]);
 
-  // Form fields
   const studentId = portalContexts?.activeContext?.student_id || '';
   const [pickupName, setPickupName] = useState('');
   const [pickupRelationship, setPickupRelationship] = useState('Parent');
@@ -51,14 +70,16 @@ export default function StudentPickupScreen() {
   const [vehicleNumber, setVehicleNumber] = useState('');
   const [notes, setNotes] = useState('');
 
-  // Generated pass state after submission
   const [newlyCreatedPass, setNewlyCreatedPass] = useState<{
     authorization: PickupAuthorization;
     otp?: string;
     qrToken?: string;
   } | null>(null);
 
-  const loadData = async () => {
+  const styles = useMemo(() => createStyles(isDark, theme.colors), [isDark, theme.colors]);
+  const inset = (key: string) => clayInset(isDark, focusedField === key);
+
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       if (studentId) {
@@ -74,17 +95,17 @@ export default function StudentPickupScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [studentId]);
 
   useEffect(() => {
-    loadData();
-  }, [studentId]);
+    void loadData();
+  }, [loadData]);
 
   const selectGuardian = (g: AuthorizedGuardian) => {
     Haptics.selectionAsync();
     setSelectedGuardianId(g.id);
     setPickupName(g.name);
-    setPickupRelationship(g.relationship);
+    setPickupRelationship(g.relationship || 'Parent');
     setPickupMobile(g.mobile);
   };
 
@@ -97,11 +118,11 @@ export default function StudentPickupScreen() {
 
   const handleCreatePickup = async () => {
     if (!pickupName.trim()) {
-      Alert.alert('Missing Field', 'Please enter the name of the person picking up the student.');
+      Alert.alert('Missing name', 'Please enter the name of the person picking up the student.');
       return;
     }
     if (!pickupMobile.trim()) {
-      Alert.alert('Missing Field', 'Please enter the contact mobile number.');
+      Alert.alert('Missing mobile', 'Please enter the contact mobile number.');
       return;
     }
 
@@ -110,7 +131,7 @@ export default function StudentPickupScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
       const res = await visitorService.createPickup({
-        studentId: studentId,
+        studentId,
         guardianId: selectedGuardianId || undefined,
         pickupName: pickupName.trim(),
         pickupRelationship: pickupRelationship.trim(),
@@ -128,10 +149,10 @@ export default function StudentPickupScreen() {
         otp: res.otp,
         qrToken: res.qrToken,
       });
-      setActivePickups((prev) => [res.authorization, ...prev]);
+      setActivePickups((prev) => [res.authorization, ...prev.filter((p) => p.id !== res.authorization.id)]);
       setActiveTab('active');
     } catch (err: any) {
-      Alert.alert('Pickup Request Error', err?.message || 'Failed to authorize student pickup.');
+      Alert.alert('Pickup request error', err?.message || 'Failed to authorize student pickup.');
     } finally {
       setSubmitting(false);
     }
@@ -150,486 +171,690 @@ export default function StudentPickupScreen() {
     }
   };
 
-  const bgColor = isDark ? '#0B0F17' : '#F4F6F9';
-  const cardBg = isDark ? '#161E2E' : '#FFFFFF';
-  const textColor = isDark ? '#F1F5F9' : '#0F172A';
-  const subColor = isDark ? '#94A3B8' : '#64748B';
-  const borderColor = isDark ? '#26334A' : '#E2E8F0';
+  const otherPickups = newlyCreatedPass
+    ? activePickups.filter((p) => p.id !== newlyCreatedPass.authorization.id)
+    : activePickups;
+
+  const webInput = (type: string) => (Platform.OS === 'web' ? ({ type } as any) : {});
 
   return (
-    <SafeAreaView style={[styles.root, { backgroundColor: bgColor }]}>
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: borderColor }]}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-          accessibilityLabel="Go back"
-        >
-          <Ionicons name="arrow-back" size={24} color={textColor} />
-        </TouchableOpacity>
-        <View style={styles.headerTitleBlock}>
-          <Text style={[styles.headerTitle, { color: textColor }]}>Student Pickup Pass</Text>
-          <Text style={[styles.headerSub, { color: subColor }]}>Gate Clearance & Child Handover</Text>
-        </View>
-        <TouchableOpacity
-          style={styles.guardiansBtn}
-          onPress={() => router.push('/Screen/authorizedGuardians' as any)}
-        >
-          <Ionicons name="people-outline" size={20} color="#10B981" />
-        </TouchableOpacity>
-      </View>
+    <ScreenLayout>
+      <View style={styles.root}>
+        <StudentSubpageHeader
+          title="Pickup Pass"
+          subtitle="Secure gate clearance for child handover"
+          onBack={() => router.back()}
+          right={
+            <TouchableOpacity
+              style={styles.headerAction}
+              onPress={() => router.push('/Screen/authorizedGuardians' as any)}
+              accessibilityRole="button"
+              accessibilityLabel="Manage authorized guardians"
+            >
+              <Ionicons name="people-outline" size={18} color={ACCENT} />
+            </TouchableOpacity>
+          }
+        />
 
-      {/* Tabs */}
-      <View style={[styles.tabBar, { backgroundColor: cardBg, borderColor }]}>
-        <TouchableOpacity
-          style={[styles.tabItem, activeTab === 'request' && styles.tabItemActive]}
-          onPress={() => setActiveTab('request')}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              { color: activeTab === 'request' ? '#10B981' : subColor },
-            ]}
-          >
-            Authorize Pickup
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tabItem, activeTab === 'active' && styles.tabItemActive]}
-          onPress={() => setActiveTab('active')}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              { color: activeTab === 'active' ? '#10B981' : subColor },
-            ]}
-          >
-            Active Passes {activePickups.length > 0 ? `(${activePickups.length})` : ''}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {activeTab === 'request' ? (
-          <View>
-            {/* Quick Pick: Authorized Guardians */}
-            {guardians.length > 0 ? (
-              <View style={styles.sectionBlock}>
-                <View style={styles.sectionTitleRow}>
-                  <Text style={[styles.sectionTitle, { color: textColor }]}>
-                    Choose Registered Guardian
-                  </Text>
-                  <TouchableOpacity onPress={() => router.push('/Screen/authorizedGuardians' as any)}>
-                    <Text style={styles.manageLink}>Manage (+)</Text>
-                  </TouchableOpacity>
-                </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.guardiansScroll}>
-                  {guardians.map((g) => {
-                    const isSelected = selectedGuardianId === g.id;
-                    return (
-                      <TouchableOpacity
-                        key={g.id}
-                        style={[
-                          styles.guardianCard,
-                          {
-                            backgroundColor: isSelected ? 'rgba(16,185,129,0.12)' : cardBg,
-                            borderColor: isSelected ? '#10B981' : borderColor,
-                          },
-                        ]}
-                        onPress={() => (isSelected ? clearSelectedGuardian() : selectGuardian(g))}
-                      >
-                        <View style={styles.guardianAvatar}>
-                          {g.photo_url ? (
-                            <Image source={{ uri: g.photo_url }} style={styles.avatarImg} />
-                          ) : (
-                            <Ionicons name="person" size={24} color="#10B981" />
-                          )}
-                        </View>
-                        <Text style={[styles.guardianName, { color: textColor }]} numberOfLines={1}>
-                          {g.name}
-                        </Text>
-                        <Text style={[styles.guardianRel, { color: subColor }]}>{g.relationship}</Text>
-                        {isSelected ? (
-                          <View style={styles.selectedBadge}>
-                            <Ionicons name="checkmark" size={12} color="#FFFFFF" />
-                          </View>
-                        ) : null}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-            ) : null}
-
-            {/* Pickup Person Form */}
-            <View style={[styles.formCard, { backgroundColor: cardBg, borderColor }]}>
-              <Text style={[styles.cardTitle, { color: textColor }]}>Pickup Details</Text>
-
-              <Text style={[styles.inputLabel, { color: subColor }]}>PERSON'S FULL NAME *</Text>
-              <TextInput
-                style={[styles.input, { color: textColor, borderColor }]}
-                placeholder="e.g. Rajesh Kumar"
-                placeholderTextColor={subColor}
-                value={pickupName}
-                onChangeText={(t) => {
-                  setPickupName(t);
-                  if (selectedGuardianId) setSelectedGuardianId(null);
+        <View style={styles.tabTrack}>
+          {([
+            { key: 'request' as const, label: 'Authorize', icon: 'shield-checkmark-outline' as const },
+            { key: 'active' as const, label: 'Active passes', icon: 'qr-code-outline' as const, count: activePickups.length },
+          ]).map((tab) => {
+            const on = activeTab === tab.key;
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                style={[styles.tabItem, on && styles.tabItemOn]}
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  setActiveTab(tab.key);
                 }}
-              />
+                activeOpacity={0.85}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: on }}
+              >
+                <Ionicons name={tab.icon} size={14} color={on ? ACCENT : theme.colors.textMuted} />
+                <Text style={[styles.tabText, { color: on ? ACCENT : theme.colors.textMuted }]}>
+                  {tab.label}
+                </Text>
+                {tab.count ? (
+                  <View style={[styles.tabCount, on && styles.tabCountOn]}>
+                    <Text style={[styles.tabCountText, on && styles.tabCountTextOn]}>{tab.count}</Text>
+                  </View>
+                ) : null}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
 
-              <View style={styles.rowInputs}>
-                <View style={styles.flex1}>
-                  <Text style={[styles.inputLabel, { color: subColor }]}>RELATIONSHIP *</Text>
-                  <TextInput
-                    style={[styles.input, { color: textColor, borderColor }]}
-                    placeholder="e.g. Father, Driver"
-                    placeholderTextColor={subColor}
-                    value={pickupRelationship}
-                    onChangeText={setPickupRelationship}
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {activeTab === 'request' ? (
+              <View>
+                {guardians.length > 0 ? (
+                  <Animated.View entering={FadeInDown.duration(240)} style={styles.sectionBlock}>
+                    <View style={styles.sectionTitleRow}>
+                      <Text style={styles.sectionTitle}>Who is picking up?</Text>
+                      <TouchableOpacity onPress={() => router.push('/Screen/authorizedGuardians' as any)}>
+                        <Text style={styles.manageLink}>Manage</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.guardiansRow}>
+                      {guardians.map((g) => {
+                        const isSelected = selectedGuardianId === g.id;
+                        return (
+                          <TouchableOpacity
+                            key={g.id}
+                            style={[styles.guardianCard, isSelected && styles.guardianCardOn]}
+                            onPress={() => (isSelected ? clearSelectedGuardian() : selectGuardian(g))}
+                            activeOpacity={0.86}
+                          >
+                            <View style={[styles.guardianAvatar, isSelected && styles.guardianAvatarOn]}>
+                              {g.photo_url ? (
+                                <Image source={{ uri: g.photo_url }} style={styles.avatarImg} />
+                              ) : (
+                                <Text style={styles.avatarInitial}>{g.name.charAt(0).toUpperCase()}</Text>
+                              )}
+                            </View>
+                            <Text style={styles.guardianName} numberOfLines={1}>{g.name}</Text>
+                            <Text style={styles.guardianRel} numberOfLines={1}>{g.relationship}</Text>
+                            {isSelected ? (
+                              <View style={styles.selectedBadge}>
+                                <Ionicons name="checkmark" size={11} color="#FFFFFF" />
+                              </View>
+                            ) : null}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </Animated.View>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.promptCard}
+                    onPress={() => router.push('/Screen/authorizedGuardians' as any)}
+                    activeOpacity={0.88}
+                  >
+                    <View style={styles.promptIcon}>
+                      <Ionicons name="person-add-outline" size={18} color={ACCENT} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.promptTitle}>Save a guardian for faster pickups</Text>
+                      <Text style={styles.promptCopy}>Add family or a driver once, then generate a pass in one tap.</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={theme.colors.textMuted} />
+                  </TouchableOpacity>
+                )}
+
+                <View style={styles.formCard}>
+                  <Text style={styles.cardTitle}>Pickup details</Text>
+                  <Text style={styles.cardHint}>Gate security will verify this person before handover.</Text>
+
+                  <Text style={styles.inputLabel}>Full name</Text>
+                  <AppTextInput
+                    style={[themeStyles.inputInChrome, styles.input, inset('name')]}
+                    placeholder="e.g. Rajesh Kumar"
+                    value={pickupName}
+                    onChangeText={(t) => {
+                      setPickupName(t);
+                      if (selectedGuardianId) setSelectedGuardianId(null);
+                    }}
+                    onFocus={() => setFocusedField('name')}
+                    onBlur={() => setFocusedField(null)}
                   />
-                </View>
-                <View style={styles.spacer} />
-                <View style={styles.flex1}>
-                  <Text style={[styles.inputLabel, { color: subColor }]}>MOBILE NUMBER *</Text>
-                  <TextInput
-                    style={[styles.input, { color: textColor, borderColor }]}
+
+                  <Text style={styles.inputLabel}>Relationship</Text>
+                  <View style={styles.chipWrap}>
+                    {RELATIONSHIPS.map((rel) => {
+                      const on = pickupRelationship === rel;
+                      return (
+                        <TouchableOpacity
+                          key={rel}
+                          style={[styles.relChip, on && styles.relChipOn]}
+                          onPress={() => {
+                            Haptics.selectionAsync();
+                            setPickupRelationship(rel);
+                          }}
+                        >
+                          <Text style={[styles.relChipText, on && styles.relChipTextOn]}>{rel}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  <Text style={styles.inputLabel}>Mobile number</Text>
+                  <AppTextInput
+                    style={[themeStyles.inputInChrome, styles.input, inset('mobile')]}
                     placeholder="e.g. 9876543210"
-                    placeholderTextColor={subColor}
                     keyboardType="phone-pad"
                     value={pickupMobile}
                     onChangeText={setPickupMobile}
+                    onFocus={() => setFocusedField('mobile')}
+                    onBlur={() => setFocusedField(null)}
                   />
-                </View>
-              </View>
 
-              <View style={styles.rowInputs}>
-                <View style={styles.flex1}>
-                  <Text style={[styles.inputLabel, { color: subColor }]}>PICKUP DATE</Text>
-                  <TextInput
-                    style={[styles.input, { color: textColor, borderColor }]}
-                    value={pickupDate}
-                    onChangeText={setPickupDate}
+                  <View style={styles.rowInputs}>
+                    <View style={styles.flex1}>
+                      <Text style={styles.inputLabel}>Pickup date</Text>
+                      <AppTextInput
+                        style={[themeStyles.inputInChrome, styles.input, inset('date')]}
+                        value={pickupDate}
+                        onChangeText={setPickupDate}
+                        onFocus={() => setFocusedField('date')}
+                        onBlur={() => setFocusedField(null)}
+                        {...webInput('date')}
+                      />
+                    </View>
+                    <View style={styles.flex1}>
+                      <Text style={styles.inputLabel}>Time window</Text>
+                      <View style={styles.timeRow}>
+                        <AppTextInput
+                          style={[themeStyles.inputInChrome, styles.smallInput, inset('start')]}
+                          value={startTime}
+                          onChangeText={setStartTime}
+                          onFocus={() => setFocusedField('start')}
+                          onBlur={() => setFocusedField(null)}
+                          {...webInput('time')}
+                        />
+                        <Text style={styles.timeDash}>–</Text>
+                        <AppTextInput
+                          style={[themeStyles.inputInChrome, styles.smallInput, inset('end')]}
+                          value={endTime}
+                          onChangeText={setEndTime}
+                          onFocus={() => setFocusedField('end')}
+                          onBlur={() => setFocusedField(null)}
+                          {...webInput('time')}
+                        />
+                      </View>
+                    </View>
+                  </View>
+
+                  <Text style={styles.inputLabel}>Vehicle number <Text style={styles.optional}>(optional)</Text></Text>
+                  <AppTextInput
+                    style={[themeStyles.inputInChrome, styles.input, inset('vehicle')]}
+                    placeholder="e.g. KA-01-AB-1234"
+                    autoCapitalize="characters"
+                    value={vehicleNumber}
+                    onChangeText={setVehicleNumber}
+                    onFocus={() => setFocusedField('vehicle')}
+                    onBlur={() => setFocusedField(null)}
                   />
+
+                  <Text style={styles.inputLabel}>Reason / notes <Text style={styles.optional}>(optional)</Text></Text>
+                  <AppTextInput
+                    style={[themeStyles.inputInChrome, styles.textArea, inset('notes')]}
+                    placeholder="e.g. Early doctor appointment"
+                    multiline
+                    value={notes}
+                    onChangeText={setNotes}
+                    onFocus={() => setFocusedField('notes')}
+                    onBlur={() => setFocusedField(null)}
+                  />
+
+                  <TouchableOpacity
+                    style={styles.submitBtn}
+                    onPress={handleCreatePickup}
+                    disabled={submitting}
+                    activeOpacity={0.9}
+                  >
+                    <LinearGradient
+                      colors={['#047857', '#10B981']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.gradientBtn}
+                    >
+                      {submitting ? (
+                        <ActivityIndicator color="#FFFFFF" />
+                      ) : (
+                        <>
+                          <Ionicons name="qr-code-outline" size={18} color="#FFFFFF" />
+                          <Text style={styles.btnText}>Generate secure pass</Text>
+                        </>
+                      )}
+                    </LinearGradient>
+                  </TouchableOpacity>
                 </View>
-                <View style={styles.spacer} />
-                <View style={styles.flex1}>
-                  <Text style={[styles.inputLabel, { color: subColor }]}>WINDOW (START - END)</Text>
-                  <View style={styles.timeRow}>
-                    <TextInput
-                      style={[styles.smallInput, { color: textColor, borderColor }]}
-                      value={startTime}
-                      onChangeText={setStartTime}
-                    />
-                    <Text style={{ color: subColor }}>-</Text>
-                    <TextInput
-                      style={[styles.smallInput, { color: textColor, borderColor }]}
-                      value={endTime}
-                      onChangeText={setEndTime}
-                    />
+
+                <View style={styles.securityBanner}>
+                  <View style={styles.securityIcon}>
+                    <Ionicons name="shield-checkmark" size={18} color={ACCENT} />
+                  </View>
+                  <View style={styles.bannerTextCol}>
+                    <Text style={styles.bannerTitle}>Verified handover only</Text>
+                    <Text style={styles.bannerDesc}>
+                      Gate security scans the QR pass and confirms the OTP before any student is released outside regular bus routes.
+                    </Text>
                   </View>
                 </View>
               </View>
+            ) : (
+              <View>
+                {newlyCreatedPass ? (
+                  <Animated.View entering={FadeInDown.duration(280)} style={styles.highlightCard}>
+                    <View style={styles.highlightBadge}>
+                      <Ionicons name="checkmark-circle" size={16} color={ACCENT} />
+                      <Text style={styles.highlightBadgeText}>Pass ready</Text>
+                    </View>
 
-              <Text style={[styles.inputLabel, { color: subColor }]}>VEHICLE NUMBER (OPTIONAL)</Text>
-              <TextInput
-                style={[styles.input, { color: textColor, borderColor }]}
-                placeholder="e.g. KA-01-AB-1234"
-                placeholderTextColor={subColor}
-                autoCapitalize="characters"
-                value={vehicleNumber}
-                onChangeText={setVehicleNumber}
-              />
+                    <View style={styles.qrCenterBox}>
+                      <QRCode
+                        value={newlyCreatedPass.qrToken || newlyCreatedPass.authorization.pass_code}
+                        size={152}
+                        color="#0F172A"
+                        backgroundColor="#FFFFFF"
+                      />
+                      <Text style={styles.passCodeLabel}>
+                        Pass code{' '}
+                        <Text style={styles.bold}>{newlyCreatedPass.authorization.pass_code}</Text>
+                      </Text>
+                    </View>
 
-              <Text style={[styles.inputLabel, { color: subColor }]}>REASON / NOTES</Text>
-              <TextInput
-                style={[styles.textArea, { color: textColor, borderColor }]}
-                placeholder="e.g. Early doctor appointment pickup"
-                placeholderTextColor={subColor}
-                multiline
-                value={notes}
-                onChangeText={setNotes}
-              />
+                    {newlyCreatedPass.otp ? (
+                      <View style={styles.otpBox}>
+                        <Text style={styles.otpHeader}>One-time release OTP</Text>
+                        <Text style={styles.otpDigits}>{newlyCreatedPass.otp}</Text>
+                        <Text style={styles.otpSub}>Share this 6-digit code with the person at the gate</Text>
+                      </View>
+                    ) : null}
 
-              <TouchableOpacity
-                style={styles.submitBtn}
-                onPress={handleCreatePickup}
-                disabled={submitting}
-              >
-                <LinearGradient
-                  colors={['#059669', '#10B981']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.gradientBtn}
-                >
-                  {submitting ? (
-                    <ActivityIndicator color="#FFFFFF" />
-                  ) : (
-                    <>
-                      <Ionicons name="key-outline" size={20} color="#FFFFFF" />
-                      <Text style={styles.btnText}>Generate Secure Pickup Pass</Text>
-                    </>
-                  )}
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
+                    <View style={styles.metaBox}>
+                      <Text style={styles.metaStrong}>{newlyCreatedPass.authorization.pickup_name}</Text>
+                      <Text style={styles.metaMuted}>
+                        {newlyCreatedPass.authorization.pickup_relationship}
+                        {' · '}
+                        {formatPickupDate(newlyCreatedPass.authorization.pickup_date)}
+                        {' · '}
+                        {formatWindow(newlyCreatedPass.authorization.valid_start_time, newlyCreatedPass.authorization.valid_end_time)}
+                      </Text>
+                    </View>
 
-            {/* Safety Banner */}
-            <View style={[styles.securityBanner, { backgroundColor: cardBg, borderColor }]}>
-              <Ionicons name="shield-checkmark" size={22} color="#10B981" />
-              <View style={styles.bannerTextCol}>
-                <Text style={[styles.bannerTitle, { color: textColor }]}>Zero-Unauthorized Release Policy</Text>
-                <Text style={[styles.bannerDesc, { color: subColor }]}>
-                  The school gate security team strictly requires QR pass scanning and OTP authentication before any student is dismissed outside regular bus routes.
-                </Text>
-              </View>
-            </View>
-          </View>
-        ) : (
-          /* Active Pickups Tab */
-          <View>
-            {newlyCreatedPass ? (
-              <View style={[styles.highlightCard, { backgroundColor: cardBg, borderColor: '#10B981' }]}>
-                <View style={styles.highlightBadge}>
-                  <Ionicons name="checkmark-circle" size={16} color="#10B981" />
-                  <Text style={styles.highlightBadgeText}>NEW PICKUP AUTHORIZATION READY</Text>
-                </View>
+                    <TouchableOpacity
+                      style={styles.sharePickupBtn}
+                      onPress={() => onSharePickupPass(newlyCreatedPass.authorization, newlyCreatedPass.otp)}
+                    >
+                      <Ionicons name="share-outline" size={18} color="#FFFFFF" />
+                      <Text style={styles.sharePickupBtnText}>Share pass with guardian</Text>
+                    </TouchableOpacity>
+                  </Animated.View>
+                ) : null}
 
-                <View style={styles.qrCenterBox}>
-                  <QRCode
-                    value={newlyCreatedPass.qrToken || newlyCreatedPass.authorization.pass_code}
-                    size={160}
-                    color="#0F172A"
-                    backgroundColor="#FFFFFF"
-                  />
-                  <Text style={styles.passCodeLabel}>
-                    Pass Code: <Text style={styles.bold}>{newlyCreatedPass.authorization.pass_code}</Text>
-                  </Text>
-                </View>
-
-                {newlyCreatedPass.otp ? (
-                  <View style={styles.otpBox}>
-                    <Text style={styles.otpHeader}>ONE-TIME RELEASE OTP</Text>
-                    <Text style={styles.otpDigits}>{newlyCreatedPass.otp}</Text>
-                    <Text style={styles.otpSub}>Provide this 6-digit code to the gate officer</Text>
+                {loading && activePickups.length === 0 && !newlyCreatedPass ? (
+                  <View style={styles.emptyState}>
+                    <ActivityIndicator color={ACCENT} />
+                    <Text style={styles.emptySub}>Loading passes…</Text>
                   </View>
                 ) : null}
 
-                <View style={styles.metaBox}>
-                  <Text style={[styles.metaItem, { color: textColor }]}>
-                    Authorized Person: <Text style={styles.bold}>{newlyCreatedPass.authorization.pickup_name}</Text> ({newlyCreatedPass.authorization.pickup_relationship})
-                  </Text>
-                  <Text style={[styles.metaItem, { color: subColor }]}>
-                    Date & Window: {newlyCreatedPass.authorization.pickup_date} ({newlyCreatedPass.authorization.valid_start_time} - {newlyCreatedPass.authorization.valid_end_time})
-                  </Text>
-                </View>
+                {otherPickups.map((pass, index) => (
+                  <Animated.View
+                    key={pass.id}
+                    entering={FadeInDown.delay(Math.min(index, 5) * 40).duration(240)}
+                    style={styles.passCard}
+                  >
+                    <View style={styles.passRow}>
+                      <View style={styles.passAvatar}>
+                        <Text style={styles.avatarInitial}>{pass.pickup_name.charAt(0).toUpperCase()}</Text>
+                      </View>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.passName}>{pass.pickup_name}</Text>
+                        <Text style={styles.passMeta}>
+                          {pass.pickup_relationship} · {formatPickupDate(pass.pickup_date)} · {formatWindow(pass.valid_start_time, pass.valid_end_time)}
+                        </Text>
+                        <Text style={styles.passCode}>#{pass.pass_code}</Text>
+                      </View>
+                      <View style={styles.statusPill}>
+                        <Text style={styles.statusPillText}>{pass.status || 'ACTIVE'}</Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.shareGhost}
+                      onPress={() => onSharePickupPass(pass)}
+                    >
+                      <Ionicons name="share-outline" size={14} color={ACCENT} />
+                      <Text style={styles.shareGhostText}>Share pass</Text>
+                    </TouchableOpacity>
+                  </Animated.View>
+                ))}
 
-                <TouchableOpacity
-                  style={styles.sharePickupBtn}
-                  onPress={() => onSharePickupPass(newlyCreatedPass.authorization, newlyCreatedPass.otp)}
-                >
-                  <Ionicons name="share-social-outline" size={18} color="#FFFFFF" />
-                  <Text style={styles.sharePickupBtnText}>Share Pass & OTP with Guardian</Text>
-                </TouchableOpacity>
+                {activePickups.length === 0 && !newlyCreatedPass && !loading ? (
+                  <Animated.View entering={FadeIn.duration(280)} style={styles.emptyState}>
+                    <View style={styles.emptyIcon}>
+                      <Ionicons name="car-outline" size={30} color={ACCENT} />
+                    </View>
+                    <Text style={styles.emptyTitle}>No active pickup passes</Text>
+                    <Text style={styles.emptySub}>
+                      Authorize a parent, relative, or driver to pick up your child at the gate.
+                    </Text>
+                    <TouchableOpacity style={styles.createFirstBtn} onPress={() => setActiveTab('request')}>
+                      <Text style={styles.createFirstBtnText}>Create a pass</Text>
+                    </TouchableOpacity>
+                  </Animated.View>
+                ) : null}
               </View>
-            ) : null}
-
-            {activePickups.length === 0 && !newlyCreatedPass ? (
-              <View style={styles.emptyState}>
-                <Ionicons name="car-outline" size={48} color={subColor} />
-                <Text style={[styles.emptyTitle, { color: textColor }]}>No Active Pickup Passes</Text>
-                <Text style={[styles.emptySub, { color: subColor }]}>
-                  Authorize a parent, relative, or driver to pick up your child securely.
-                </Text>
-                <TouchableOpacity
-                  style={styles.createFirstBtn}
-                  onPress={() => setActiveTab('request')}
-                >
-                  <Text style={styles.createFirstBtnText}>Create Pickup Pass</Text>
-                </TouchableOpacity>
-              </View>
-            ) : null}
-          </View>
-        )}
-      </ScrollView>
-    </SafeAreaView>
+            )}
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </View>
+    </ScreenLayout>
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  backButton: { padding: 6 },
-  headerTitleBlock: { flex: 1, marginLeft: 8 },
-  headerTitle: { fontSize: 18, fontWeight: '700' },
-  headerSub: { fontSize: 12 },
-  guardiansBtn: { padding: 8 },
-  tabBar: {
-    flexDirection: 'row',
-    marginHorizontal: 16,
-    marginTop: 12,
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
-  },
-  tabItem: { flex: 1, paddingVertical: 10, alignItems: 'center' },
-  tabItemActive: { borderBottomWidth: 2, borderBottomColor: '#10B981' },
-  tabText: { fontSize: 13, fontWeight: '700' },
-  scrollContent: { padding: 16, paddingBottom: 40 },
-  sectionBlock: { marginBottom: 16 },
-  sectionTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  sectionTitle: { fontSize: 14, fontWeight: '700' },
-  manageLink: { color: '#10B981', fontSize: 12, fontWeight: '700' },
-  guardiansScroll: { flexDirection: 'row' },
-  guardianCard: {
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    marginRight: 10,
-    width: 100,
-    position: 'relative',
-  },
-  guardianAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(16,185,129,0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
-    overflow: 'hidden',
-  },
-  avatarImg: { width: '100%', height: '100%' },
-  guardianName: { fontSize: 12, fontWeight: '700', textAlign: 'center' },
-  guardianRel: { fontSize: 10, textAlign: 'center', marginTop: 2 },
-  selectedBadge: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    backgroundColor: '#10B981',
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  formCard: {
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  cardTitle: { fontSize: 15, fontWeight: '700', marginBottom: 6 },
-  inputLabel: { fontSize: 11, fontWeight: '700', marginTop: 10, marginBottom: 4 },
-  input: {
-    height: 44,
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 12,
-    fontSize: 14,
-  },
-  textArea: {
-    height: 70,
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    fontSize: 14,
-    textAlignVertical: 'top',
-  },
-  rowInputs: { flexDirection: 'row', alignItems: 'center' },
-  flex1: { flex: 1 },
-  spacer: { width: 10 },
-  timeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  smallInput: {
-    flex: 1,
-    height: 44,
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 8,
-    fontSize: 13,
-    textAlign: 'center',
-  },
-  submitBtn: { marginTop: 20, borderRadius: 12, overflow: 'hidden' },
-  gradientBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    gap: 8,
-  },
-  btnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
-  securityBanner: {
-    flexDirection: 'row',
-    gap: 12,
-    borderRadius: 14,
-    padding: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    marginTop: 16,
-  },
-  bannerTextCol: { flex: 1 },
-  bannerTitle: { fontSize: 13, fontWeight: '700' },
-  bannerDesc: { fontSize: 11, lineHeight: 16, marginTop: 4 },
-  highlightCard: {
-    borderRadius: 16,
-    borderWidth: 2,
-    padding: 16,
-    alignItems: 'center',
-  },
-  highlightBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 16,
-  },
-  highlightBadgeText: { color: '#10B981', fontSize: 12, fontWeight: '800' },
-  qrCenterBox: {
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderRadius: 16,
-    alignItems: 'center',
-  },
-  passCodeLabel: { fontSize: 13, color: '#0F172A', marginTop: 10 },
-  bold: { fontWeight: '700' },
-  otpBox: {
-    backgroundColor: 'rgba(16,185,129,0.1)',
-    borderRadius: 12,
-    padding: 14,
-    alignItems: 'center',
-    width: '100%',
-    marginTop: 16,
-  },
-  otpHeader: { fontSize: 11, fontWeight: '800', color: '#059669', letterSpacing: 1 },
-  otpDigits: { fontSize: 32, fontWeight: '900', color: '#10B981', letterSpacing: 6, marginVertical: 4 },
-  otpSub: { fontSize: 11, color: '#059669' },
-  metaBox: { width: '100%', marginTop: 16, gap: 4 },
-  metaItem: { fontSize: 13 },
-  sharePickupBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#10B981',
-    width: '100%',
-    paddingVertical: 14,
-    borderRadius: 12,
-    marginTop: 16,
-  },
-  sharePickupBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
-  emptyState: { alignItems: 'center', justifyContent: 'center', marginTop: 60, paddingHorizontal: 32 },
-  emptyTitle: { fontSize: 16, fontWeight: '700', marginTop: 12 },
-  emptySub: { fontSize: 13, textAlign: 'center', marginTop: 4 },
-  createFirstBtn: {
-    marginTop: 16,
-    backgroundColor: '#10B981',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 10,
-  },
-  createFirstBtnText: { color: '#FFFFFF', fontWeight: '700' },
-});
+function createStyles(
+  isDark: boolean,
+  colors: { background: string; textStrong: string; textMuted: string; border: string },
+) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: colors.background },
+    headerAction: {
+      width: 40,
+      height: 40,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: isDark ? 'rgba(16,185,129,0.16)' : '#ECFDF5',
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(16,185,129,0.28)' : '#A7F3D0',
+    },
+    tabTrack: {
+      flexDirection: 'row',
+      marginHorizontal: 16,
+      marginBottom: 8,
+      padding: 4,
+      gap: 4,
+      borderRadius: 16,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(15,23,42,0.045)',
+    },
+    tabItem: {
+      flex: 1,
+      minHeight: 42,
+      borderRadius: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+    },
+    tabItemOn: { backgroundColor: isDark ? 'rgba(16,185,129,0.18)' : '#FFFFFF' },
+    tabText: { fontSize: 13, fontWeight: '800' },
+    tabCount: {
+      minWidth: 20,
+      height: 20,
+      paddingHorizontal: 5,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.06)',
+    },
+    tabCountOn: { backgroundColor: ACCENT },
+    tabCountText: { fontSize: 11, fontWeight: '800', color: colors.textMuted },
+    tabCountTextOn: { color: '#FFFFFF' },
+    scrollContent: { padding: 16, paddingBottom: 48 },
+    sectionBlock: { marginBottom: 16 },
+    sectionTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+    sectionTitle: { fontSize: 15, fontWeight: '800', color: colors.textStrong, letterSpacing: -0.2 },
+    manageLink: { color: ACCENT, fontSize: 13, fontWeight: '800' },
+    guardiansRow: { gap: 10, paddingRight: 8 },
+    guardianCard: {
+      ...clayCard(isDark, 'sm'),
+      alignItems: 'center',
+      padding: 12,
+      borderRadius: 18,
+      width: 108,
+      position: 'relative',
+    },
+    guardianCardOn: {
+      borderColor: ACCENT,
+      backgroundColor: isDark ? 'rgba(16,185,129,0.14)' : '#ECFDF5',
+    },
+    guardianAvatar: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      backgroundColor: isDark ? 'rgba(16,185,129,0.18)' : '#D1FAE5',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 8,
+      overflow: 'hidden',
+    },
+    guardianAvatarOn: { backgroundColor: ACCENT },
+    avatarImg: { width: '100%', height: '100%' },
+    avatarInitial: { fontSize: 16, fontWeight: '800', color: ACCENT },
+    guardianName: { fontSize: 12, fontWeight: '800', textAlign: 'center', color: colors.textStrong },
+    guardianRel: { fontSize: 11, textAlign: 'center', marginTop: 2, color: colors.textMuted, fontWeight: '600' },
+    selectedBadge: {
+      position: 'absolute',
+      top: 8,
+      right: 8,
+      backgroundColor: ACCENT,
+      width: 18,
+      height: 18,
+      borderRadius: 9,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    promptCard: {
+      ...clayCard(isDark, 'sm'),
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      padding: 14,
+      borderRadius: 18,
+      marginBottom: 16,
+    },
+    promptIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: isDark ? 'rgba(16,185,129,0.16)' : '#ECFDF5',
+    },
+    promptTitle: { fontSize: 14, fontWeight: '800', color: colors.textStrong },
+    promptCopy: { fontSize: 12, color: colors.textMuted, marginTop: 2, lineHeight: 17 },
+    formCard: {
+      ...clayCard(isDark, 'sm'),
+      borderRadius: 22,
+      padding: 16,
+    },
+    cardTitle: { fontSize: 16, fontWeight: '800', color: colors.textStrong, letterSpacing: -0.2 },
+    cardHint: { fontSize: 13, color: colors.textMuted, marginTop: 4, marginBottom: 8, lineHeight: 18 },
+    inputLabel: {
+      fontSize: 12,
+      fontWeight: '800',
+      marginTop: 12,
+      marginBottom: 6,
+      color: colors.textMuted,
+      letterSpacing: 0.2,
+    },
+    optional: { fontWeight: '600', color: colors.textMuted },
+    input: {
+      height: 46,
+      width: '100%',
+      maxWidth: '100%',
+      borderRadius: 14,
+      paddingHorizontal: 14,
+      fontSize: 15,
+      color: colors.textStrong,
+    },
+    textArea: {
+      minHeight: 78,
+      borderRadius: 14,
+      paddingHorizontal: 14,
+      paddingTop: 12,
+      fontSize: 15,
+      color: colors.textStrong,
+      textAlignVertical: 'top',
+    },
+    chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    relChip: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(15,23,42,0.08)',
+      backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#FFFFFF',
+    },
+    relChipOn: {
+      backgroundColor: ACCENT,
+      borderColor: ACCENT,
+    },
+    relChipText: { fontSize: 12, fontWeight: '700', color: colors.textStrong },
+    relChipTextOn: { color: '#FFFFFF' },
+    rowInputs: { flexDirection: 'row', gap: 10 },
+    flex1: { flex: 1 },
+    timeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    smallInput: {
+      flex: 1,
+      height: 46,
+      borderRadius: 14,
+      paddingHorizontal: 8,
+      fontSize: 13,
+      textAlign: 'center',
+      color: colors.textStrong,
+    },
+    timeDash: { color: colors.textMuted, fontWeight: '700' },
+    submitBtn: { marginTop: 20, borderRadius: 16, overflow: 'hidden' },
+    gradientBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 15,
+      gap: 8,
+    },
+    btnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
+    securityBanner: {
+      ...clayCard(isDark, 'sm'),
+      flexDirection: 'row',
+      gap: 12,
+      borderRadius: 18,
+      padding: 14,
+      marginTop: 14,
+    },
+    securityIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: isDark ? 'rgba(16,185,129,0.16)' : '#ECFDF5',
+    },
+    bannerTextCol: { flex: 1 },
+    bannerTitle: { fontSize: 13, fontWeight: '800', color: colors.textStrong },
+    bannerDesc: { fontSize: 12, lineHeight: 18, marginTop: 4, color: colors.textMuted },
+    highlightCard: {
+      ...clayCard(isDark, 'md'),
+      borderRadius: 24,
+      padding: 18,
+      alignItems: 'center',
+      borderColor: ACCENT,
+      marginBottom: 14,
+    },
+    highlightBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: 16,
+      backgroundColor: isDark ? 'rgba(16,185,129,0.16)' : '#ECFDF5',
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 999,
+    },
+    highlightBadgeText: { color: ACCENT, fontSize: 12, fontWeight: '800' },
+    qrCenterBox: {
+      backgroundColor: '#FFFFFF',
+      padding: 16,
+      borderRadius: 20,
+      alignItems: 'center',
+    },
+    passCodeLabel: { fontSize: 13, color: '#0F172A', marginTop: 10, fontWeight: '600' },
+    bold: { fontWeight: '800' },
+    otpBox: {
+      backgroundColor: isDark ? 'rgba(16,185,129,0.12)' : '#ECFDF5',
+      borderRadius: 16,
+      padding: 14,
+      alignItems: 'center',
+      width: '100%',
+      marginTop: 16,
+    },
+    otpHeader: { fontSize: 11, fontWeight: '800', color: '#047857', letterSpacing: 0.8, textTransform: 'uppercase' },
+    otpDigits: { fontSize: 32, fontWeight: '900', color: ACCENT, letterSpacing: 6, marginVertical: 4 },
+    otpSub: { fontSize: 12, color: '#047857', textAlign: 'center' },
+    metaBox: { width: '100%', marginTop: 16, alignItems: 'center' },
+    metaStrong: { fontSize: 16, fontWeight: '800', color: colors.textStrong },
+    metaMuted: { fontSize: 13, color: colors.textMuted, marginTop: 4, textAlign: 'center' },
+    sharePickupBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      backgroundColor: ACCENT,
+      width: '100%',
+      paddingVertical: 14,
+      borderRadius: 14,
+      marginTop: 16,
+    },
+    sharePickupBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
+    passCard: {
+      ...clayCard(isDark, 'sm'),
+      borderRadius: 18,
+      padding: 14,
+      marginBottom: 12,
+    },
+    passRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    passAvatar: {
+      width: 44,
+      height: 44,
+      borderRadius: 16,
+      backgroundColor: isDark ? 'rgba(16,185,129,0.16)' : '#ECFDF5',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    passName: { fontSize: 15, fontWeight: '800', color: colors.textStrong },
+    passMeta: { fontSize: 12, color: colors.textMuted, marginTop: 2, fontWeight: '600' },
+    passCode: { fontSize: 12, color: ACCENT, fontWeight: '800', marginTop: 4 },
+    statusPill: {
+      backgroundColor: isDark ? 'rgba(16,185,129,0.16)' : '#ECFDF5',
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 8,
+    },
+    statusPillText: { color: ACCENT, fontSize: 10, fontWeight: '800' },
+    shareGhost: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      marginTop: 12,
+      paddingTop: 10,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: schoolColorWithAlpha('#94A3B8', isDark ? 0.24 : 0.28),
+    },
+    shareGhostText: { color: ACCENT, fontSize: 13, fontWeight: '800' },
+    emptyState: { alignItems: 'center', justifyContent: 'center', marginTop: 48, paddingHorizontal: 28, gap: 8 },
+    emptyIcon: {
+      width: 72,
+      height: 72,
+      borderRadius: 26,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: isDark ? 'rgba(16,185,129,0.16)' : '#ECFDF5',
+      marginBottom: 6,
+    },
+    emptyTitle: { fontSize: 18, fontWeight: '800', color: colors.textStrong, textAlign: 'center', letterSpacing: -0.3 },
+    emptySub: { fontSize: 14, textAlign: 'center', lineHeight: 20, color: colors.textMuted, maxWidth: 280 },
+    createFirstBtn: {
+      marginTop: 10,
+      backgroundColor: ACCENT,
+      paddingHorizontal: 18,
+      paddingVertical: 12,
+      borderRadius: 14,
+    },
+    createFirstBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 14 },
+  });
+}
