@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Nexsyrus School IMS",
-    "slug": "demo-ims",
+    "name": "Vikas Model School Balampet",
+    "slug": "vikasmodelschoolbalampet",
     "version": "3.1.2",
     "platforms": [
       "android",
@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "requireFullScreen": false,
-      "bundleIdentifier": "com.schoolims.default2",
+      "bundleIdentifier": "com.nexsyrussims.vikasmodelschool",
       "buildNumber": "1",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
@@ -31,15 +31,15 @@
       }
     },
     "android": {
-      "package": "com.schoolims.default2",
+      "package": "com.nexsyrussims.vikasmodelschool",
       "jsEngine": "hermes",
       "versionCode": 1,
       "googleServicesFile": "./google-services.json",
       "enableShrinkResources": true,
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/icon.png",
+        "foregroundImage": "./assets/images/icon-v2.png",
         "backgroundColor": "#E6F4FE",
-        "monochromeImage": "./assets/images/icon.png"
+        "monochromeImage": "./assets/images/icon-v2.png"
       },
       "useNextNotificationsApi": true,
       "permissions": [
@@ -118,9 +118,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "a9e98d3f-cdaf-4af4-b8f6-0d83882035b9"
+        "projectId": "431387a6-0e21-4d25-bf0f-5fdd3ad56585"
       }
     },
-    "owner": "bhan_reddy"
+    "owner": "nexsyrus"
   }
 }
