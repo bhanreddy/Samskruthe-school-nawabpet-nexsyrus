@@ -31,11 +31,13 @@ import { EventDetailModal } from '../../src/components/calendar/EventDetailModal
 import { alertCompat } from '../../src/utils/crossPlatformAlert';
 import { todayYmd, shiftMonthKeepingDay } from '../../src/components/calendar/CalendarTheme';
 import * as Haptics from '../../src/utils/haptics';
+import { useTranslation } from 'react-i18next';
 
 type ViewMode = 'MONTH' | 'AGENDA';
 
 export default function StudentCalendarScreen() {
   const { theme, isDark } = useTheme();
+  const { t } = useTranslation();
   const { user } = useAuth();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -68,7 +70,7 @@ export default function StudentCalendarScreen() {
       });
       setEvents(data);
     } catch {
-      alertCompat('Error', 'Failed to load school calendar');
+      alertCompat(t('studentCalendar.loadErrorTitle'), t('studentCalendar.loadError'));
     }
   }, [currentDate, studentId]);
 
@@ -124,7 +126,7 @@ export default function StudentCalendarScreen() {
       window.open(url, '_blank');
     } else {
       Linking.openURL(url).catch(() => {
-        alertCompat('Export', 'Could not open calendar sync URL');
+        alertCompat(t('studentCalendar.exportTitle'), t('studentCalendar.exportError'));
       });
     }
   };
@@ -138,14 +140,14 @@ export default function StudentCalendarScreen() {
   }, [events, selectedDate]);
 
   const tabs: Array<{ key: ViewMode; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
-    { key: 'MONTH', label: 'Month', icon: 'calendar' },
-    { key: 'AGENDA', label: 'Agenda', icon: 'list' },
+    { key: 'MONTH', label: t('studentCalendar.month'), icon: 'calendar' },
+    { key: 'AGENDA', label: t('studentCalendar.agenda'), icon: 'list' },
   ];
 
   return (
     <ScreenLayout>
       <View style={styles.container}>
-        <StudentHeader title="School Calendar" />
+        <StudentHeader title={t('studentCalendar.title')} />
 
         <View style={styles.toolbar}>
           <View style={styles.tabs}>
@@ -189,17 +191,17 @@ export default function StudentCalendarScreen() {
             onPress={handleExportIcs}
             activeOpacity={0.7}
             accessibilityRole="button"
-            accessibilityLabel="Sync calendar to device"
+            accessibilityLabel={t('studentCalendar.syncA11y')}
           >
             <Ionicons name="download-outline" size={16} color="#4F46E5" />
-            {!compact ? <Text style={styles.syncBtnText}>Sync</Text> : null}
+            {!compact ? <Text style={styles.syncBtnText}>{t('studentCalendar.sync')}</Text> : null}
           </TouchableOpacity>
         </View>
 
         {loading ? (
           <View style={styles.centeredLoader}>
             <ActivityIndicator size="large" color="#4F46E5" />
-            <Text style={styles.loadingLabel}>Loading school schedule…</Text>
+            <Text style={styles.loadingLabel}>{t('studentCalendar.loading')}</Text>
           </View>
         ) : (
           <ScrollView

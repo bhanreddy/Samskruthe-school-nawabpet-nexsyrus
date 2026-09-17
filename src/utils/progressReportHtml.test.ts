@@ -69,10 +69,69 @@ const student: ProgressReportStudent = {
   ],
 };
 
+const directSubject = (
+  overrides: Partial<ProgressReportStudent['subjects'][number]>,
+): ProgressReportStudent['subjects'][number] => ({
+  ...student.subjects[0],
+  ...overrides,
+});
+
+const directStudent = (
+  subjects: ProgressReportStudent['subjects'],
+): ProgressReportStudent => ({ ...student, subjects });
+
 describe('progress report HTML', () => {
   it('uses only subjects matching the chosen assessment format', () => {
     expect(progressReportSummary(student, 'direct').subjects.map((item) => item.subject)).toEqual(['English']);
     expect(progressReportSummary(student, 'component').subjects.map((item) => item.subject)).toEqual(['Mathematics']);
+  });
+
+  it('divides the grand total by the maximum of the subjects that were actually marked', () => {
+    const summary = progressReportSummary(directStudent([
+      directSubject({ subject: 'English', consolidatedMaxMarks: 100, consolidatedMarksObtained: 85 }),
+      directSubject({ subject: 'Mathematics', consolidatedMaxMarks: 100, consolidatedMarksObtained: 90 }),
+      directSubject({ subject: 'Science', consolidatedMaxMarks: 100, consolidatedMarksObtained: 80 }),
+    ]), 'direct');
+    expect(summary.totalObtained).toBe(255);
+    expect(summary.totalMax).toBe(300);
+    expect(summary.percentage).toBe(85);
+    expect(summary.result).toBe('PROMOTED');
+  });
+
+  it('leaves an unmarked subject out of the maximum instead of deflating the percentage', () => {
+    const summary = progressReportSummary(directStudent([
+      directSubject({ subject: 'English', consolidatedMaxMarks: 100, consolidatedMarksObtained: 85 }),
+      directSubject({ subject: 'Mathematics', consolidatedMaxMarks: 100, consolidatedMarksObtained: 85 }),
+      directSubject({
+        subject: 'Science',
+        consolidatedMaxMarks: 100,
+        consolidatedMarksObtained: null,
+        obtained: null,
+        hasMarks: false,
+      }),
+    ]), 'direct');
+    expect(summary.totalObtained).toBe(170);
+    expect(summary.totalMax).toBe(200);
+    expect(summary.percentage).toBe(85);
+    expect(summary.pending).toBe(1);
+    expect(summary.result).toBe('PENDING');
+  });
+
+  it('keeps an absent subject in the maximum with a zero score', () => {
+    const summary = progressReportSummary(directStudent([
+      directSubject({ subject: 'English', consolidatedMaxMarks: 100, consolidatedMarksObtained: 80 }),
+      directSubject({
+        subject: 'Mathematics',
+        consolidatedMaxMarks: 100,
+        consolidatedMarksObtained: null,
+        obtained: null,
+        isAbsent: true,
+      }),
+    ]), 'direct');
+    expect(summary.totalObtained).toBe(80);
+    expect(summary.totalMax).toBe(200);
+    expect(summary.percentage).toBe(40);
+    expect(summary.result).toBe('NEEDS SUPPORT');
   });
 
   it('duplicates a single student into two labelled copies on one A4 page', () => {

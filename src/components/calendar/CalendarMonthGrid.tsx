@@ -7,6 +7,7 @@ import { clayCard } from '../../theme/clayStyles';
 import { CalendarEvent } from '../../services/calendarService';
 import * as Haptics from '../../utils/haptics';
 import { EVENT_TYPE_CONFIG, parseYmd, toLocalYmd, todayYmd, addDaysYmd } from './CalendarTheme';
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   currentDate: Date;
@@ -28,10 +29,10 @@ const WEEKDAYS = [
 ];
 
 const LEGEND = [
-  { label: 'Holiday', color: '#DC2626' },
-  { label: 'Exam', color: '#4F46E5' },
-  { label: 'Fee', color: '#EA580C' },
-  { label: 'Event', color: '#64748B' },
+  { key: 'holiday' as const, color: '#DC2626' },
+  { key: 'exam' as const, color: '#4F46E5' },
+  { key: 'fee' as const, color: '#EA580C' },
+  { key: 'event' as const, color: '#64748B' },
 ];
 
 export const CalendarMonthGrid: React.FC<Props> = ({
@@ -43,6 +44,7 @@ export const CalendarMonthGrid: React.FC<Props> = ({
   onGoToday,
 }) => {
   const { theme, isDark } = useTheme();
+  const { t, i18n } = useTranslation();
   const [layoutWidth, setLayoutWidth] = React.useState(0);
   const compact = layoutWidth > 0 ? layoutWidth < 560 : true;
   const styles = React.useMemo(
@@ -82,7 +84,8 @@ export const CalendarMonthGrid: React.FC<Props> = ({
     return events.filter((ev) => (ev.start_date || '').startsWith(prefix) || (ev.end_date || '').startsWith(prefix));
   }, [events, year, month]);
 
-  const monthName = currentDate.toLocaleDateString('en-IN', {
+  const locale = i18n.language?.startsWith('te') ? 'te-IN' : 'en-IN';
+  const monthName = currentDate.toLocaleDateString(locale, {
     month: compact ? 'short' : 'long',
     year: 'numeric',
   });
@@ -142,7 +145,7 @@ export const CalendarMonthGrid: React.FC<Props> = ({
           }}
           activeOpacity={0.7}
           accessibilityRole="button"
-          accessibilityLabel="Previous month"
+          accessibilityLabel={t('studentCalendar.prevMonth')}
         >
           <Ionicons name="chevron-back" size={18} color={theme.colors.text} />
         </TouchableOpacity>
@@ -153,8 +156,8 @@ export const CalendarMonthGrid: React.FC<Props> = ({
           </Text>
           <Text style={styles.monthSub} numberOfLines={1}>
             {monthEvents.length === 0
-              ? 'No events this month'
-              : `${monthEvents.length} event${monthEvents.length === 1 ? '' : 's'}`}
+              ? t('studentCalendar.noEventsThisMonth')
+              : t('studentCalendar.eventCount', { count: monthEvents.length })}
           </Text>
         </View>
 
@@ -166,7 +169,7 @@ export const CalendarMonthGrid: React.FC<Props> = ({
           }}
           activeOpacity={0.7}
           accessibilityRole="button"
-          accessibilityLabel="Next month"
+          accessibilityLabel={t('studentCalendar.nextMonth')}
         >
           <Ionicons name="chevron-forward" size={18} color={theme.colors.text} />
         </TouchableOpacity>
@@ -180,7 +183,7 @@ export const CalendarMonthGrid: React.FC<Props> = ({
           }}
           activeOpacity={0.8}
           accessibilityRole="button"
-          accessibilityLabel="Go to today"
+          accessibilityLabel={t('studentCalendar.goToday')}
         >
           <LinearGradient
             colors={isDark ? ['#4F46E5', '#7C3AED'] : ['#4F46E5', '#6366F1']}
@@ -189,7 +192,7 @@ export const CalendarMonthGrid: React.FC<Props> = ({
             style={styles.todayButton}
           >
             <Ionicons name="today-outline" size={13} color="#FFFFFF" />
-            <Text style={styles.todayButtonText}>Today</Text>
+            <Text style={styles.todayButtonText}>{t('studentCalendar.today')}</Text>
           </LinearGradient>
         </TouchableOpacity>
       </View>
@@ -198,7 +201,7 @@ export const CalendarMonthGrid: React.FC<Props> = ({
         {WEEKDAYS.map((wd, idx) => (
           <View key={wd.key} style={styles.weekdayCell}>
             <Text style={[styles.weekdayText, idx === 0 && styles.sundayWeekdayText]}>
-              {compact ? wd.short : wd.full}
+              {compact ? t(`studentCalendar.weekdayShort.${wd.key}`) : t(`studentCalendar.weekday.${wd.key}`)}
             </Text>
           </View>
         ))}
@@ -286,9 +289,9 @@ export const CalendarMonthGrid: React.FC<Props> = ({
 
       <View style={styles.legendRow}>
         {LEGEND.map((item) => (
-          <View key={item.label} style={styles.legendItem}>
+          <View key={item.key} style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: item.color }]} />
-            <Text style={styles.legendText}>{item.label}</Text>
+            <Text style={styles.legendText}>{t(`studentCalendar.${item.key}`)}</Text>
           </View>
         ))}
       </View>

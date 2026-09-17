@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TextInput,
   TouchableOpacity,
   ActivityIndicator,
   Alert,
@@ -15,6 +14,8 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import AppTextInput from '@/src/components/AppTextInput';
+import { styles as themeStyles } from '@/src/theme/styles';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,6 +25,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from '@/src/utils/haptics';
 import { useAuth } from '@/src/hooks/useAuth';
 import { useTheme } from '@/src/hooks/useTheme';
+import { useTranslation } from 'react-i18next';
 import { clayCard, clayInset } from '@/src/theme/clayStyles';
 import { schoolColorWithAlpha } from '@/src/constants/schoolConfig';
 import ScreenLayout from '@/src/components/ScreenLayout';
@@ -34,15 +36,16 @@ const ACCENT = '#059669';
 const RELATIONSHIPS = ['Father', 'Mother', 'Grandfather', 'Grandmother', 'Uncle', 'Aunt', 'Family Driver', 'Other Guardian'];
 
 const STEPS = [
-  { icon: 'person-add-outline' as const, title: 'Add people you trust', copy: 'Family or a regular driver.' },
-  { icon: 'camera-outline' as const, title: 'Attach a clear photo', copy: 'Helps the gate confirm identity.' },
-  { icon: 'key-outline' as const, title: 'Generate a pass in seconds', copy: 'No more last-minute phone calls.' },
+  { icon: 'person-add-outline' as const, titleKey: 'stepAdd', copyKey: 'stepAddCopy' },
+  { icon: 'camera-outline' as const, titleKey: 'stepPhoto', copyKey: 'stepPhotoCopy' },
+  { icon: 'key-outline' as const, titleKey: 'stepPass', copyKey: 'stepPassCopy' },
 ];
 
 export default function AuthorizedGuardiansScreen() {
   const router = useRouter();
   const { portalContexts } = useAuth();
   const { isDark, theme } = useTheme();
+  const { t } = useTranslation();
 
   const studentId = portalContexts?.activeContext?.student_id || '';
   const [guardians, setGuardians] = useState<AuthorizedGuardian[]>([]);
@@ -76,17 +79,31 @@ export default function AuthorizedGuardiansScreen() {
     loadGuardians();
   }, [studentId]);
 
+  const resetForm = () => {
+    setName('');
+    setMobile('');
+    setIdReference('');
+    setPhotoUri(null);
+    setRelationship('Father');
+    setFormError(null);
+  };
+
   const openModal = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setFormError(null);
+    resetForm();
     setModalVisible(true);
+  };
+
+  const closeModal = () => {
+    setModalVisible(false);
+    resetForm();
   };
 
   const handlePickPhoto = async () => {
     Haptics.selectionAsync();
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission Needed', 'Please allow gallery access to upload a guardian photo.');
+      Alert.alert(t('studentGuardians.permissionTitle'), t('studentGuardians.permissionBody'));
       return;
     }
     const res = await ImagePicker.launchImageLibraryAsync({
@@ -102,11 +119,11 @@ export default function AuthorizedGuardiansScreen() {
 
   const handleAddGuardian = async () => {
     if (!name.trim() || !mobile.trim()) {
-      setFormError('Name and mobile number are required.');
+      setFormError(t('studentGuardians.formRequired'));
       return;
     }
     if (mobile.trim().length < 10) {
-      setFormError('Enter a valid 10-digit mobile number.');
+      setFormError(t('studentGuardians.formMobile'));
       return;
     }
 
@@ -126,13 +143,9 @@ export default function AuthorizedGuardiansScreen() {
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setGuardians((prev) => [res.guardian, ...prev]);
-      setModalVisible(false);
-      setName('');
-      setMobile('');
-      setIdReference('');
-      setPhotoUri(null);
+      closeModal();
     } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Failed to save authorized guardian');
+      Alert.alert(t('studentGuardians.errorTitle'), err?.message || t('studentGuardians.errorBody'));
     } finally {
       setSubmitting(false);
     }
@@ -147,11 +160,11 @@ export default function AuthorizedGuardiansScreen() {
     <ScreenLayout>
       <SafeAreaView style={styles.root} edges={['left', 'right', 'bottom']}>
         <StudentSubpageHeader
-          title="Guardians"
-          subtitle="People trusted to collect your child"
+          title={t('studentGuardians.title')}
+          subtitle={t('studentGuardians.subtitle')}
           onBack={() => router.back()}
           right={
-            <Pressable style={styles.addButton} onPress={openModal} accessibilityRole="button" accessibilityLabel="Add guardian">
+            <Pressable style={styles.addButton} onPress={openModal} accessibilityRole="button" accessibilityLabel={t('studentGuardians.addGuardian')}>
               <Ionicons name="add" size={20} color="#FFFFFF" />
             </Pressable>
           }
@@ -163,42 +176,38 @@ export default function AuthorizedGuardiansScreen() {
               <Ionicons name="shield-checkmark" size={18} color={ACCENT} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.policyTitle}>Verified at the gate</Text>
-              <Text style={styles.policyText}>
-                Gatekeepers match a clear photo with the pickup pass before your child is released.
-              </Text>
+              <Text style={styles.policyTitle}>{t('studentGuardians.verifiedTitle')}</Text>
+              <Text style={styles.policyText}>{t('studentGuardians.verifiedCopy')}</Text>
             </View>
           </View>
 
           {loading ? (
             <View style={styles.centerContainer}>
               <ActivityIndicator size="small" color={ACCENT} />
-              <Text style={styles.loadingLabel}>Loading trusted people…</Text>
+              <Text style={styles.loadingLabel}>{t('studentGuardians.loading')}</Text>
             </View>
           ) : guardians.length === 0 ? (
             <Animated.View entering={FadeIn.duration(280)} style={styles.emptyContainer}>
               <View style={styles.emptyIconWell}>
                 <Ionicons name="people" size={32} color={ACCENT} />
               </View>
-              <Text style={styles.emptyTitle}>No trusted people yet</Text>
-              <Text style={styles.emptySub}>
-                Pre-authorize family members or a driver so pickup at the gate is fast and safe.
-              </Text>
+              <Text style={styles.emptyTitle}>{t('studentGuardians.emptyTitle')}</Text>
+              <Text style={styles.emptySub}>{t('studentGuardians.emptySub')}</Text>
               {STEPS.map((step) => (
-                <View key={step.title} style={styles.stepRow}>
+                <View key={step.titleKey} style={styles.stepRow}>
                   <View style={styles.stepIcon}>
                     <Ionicons name={step.icon} size={16} color={ACCENT} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.stepTitle}>{step.title}</Text>
-                    <Text style={styles.stepCopy}>{step.copy}</Text>
+                    <Text style={styles.stepTitle}>{t(`studentGuardians.${step.titleKey}`)}</Text>
+                    <Text style={styles.stepCopy}>{t(`studentGuardians.${step.copyKey}`)}</Text>
                   </View>
                 </View>
               ))}
               <TouchableOpacity style={styles.addFirstBtn} onPress={openModal} activeOpacity={0.9}>
                 <LinearGradient colors={['#047857', '#10B981']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.addFirstGradient}>
                   <Ionicons name="add" size={18} color="#FFFFFF" />
-                  <Text style={styles.addFirstBtnText}>Add first person</Text>
+                  <Text style={styles.addFirstBtnText}>{t('studentGuardians.addFirst')}</Text>
                 </LinearGradient>
               </TouchableOpacity>
             </Animated.View>
@@ -221,12 +230,12 @@ export default function AuthorizedGuardiansScreen() {
                     <View style={styles.nameRow}>
                       <Text style={styles.guardianName}>{g.name}</Text>
                       <View style={styles.statusPill}>
-                        <Text style={styles.statusPillText}>{g.status || 'ACTIVE'}</Text>
+                        <Text style={styles.statusPillText}>{t(`studentGuardians.status.${g.status || 'ACTIVE'}`, g.status || 'ACTIVE')}</Text>
                       </View>
                     </View>
-                    <Text style={styles.guardianMeta}>{g.relationship}</Text>
+                    <Text style={styles.guardianMeta}>{t(`studentGuardians.rel.${g.relationship.replace(/\s+/g, '')}`, g.relationship)}</Text>
                     {g.id_reference_masked ? (
-                      <Text style={styles.idMasked}>ID · {g.id_reference_masked}</Text>
+                      <Text style={styles.idMasked}>{t('studentGuardians.idRef', { value: g.id_reference_masked })}</Text>
                     ) : null}
                   </View>
                 </View>
@@ -238,10 +247,15 @@ export default function AuthorizedGuardiansScreen() {
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.passBtn}
-                    onPress={() => router.push('/Screen/studentPickup' as any)}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/Screen/studentPickup',
+                        params: { guardianId: g.id },
+                      } as any)
+                    }
                   >
                     <Ionicons name="key-outline" size={14} color="#FFFFFF" />
-                    <Text style={styles.passBtnText}>Pickup pass</Text>
+                    <Text style={styles.passBtnText}>{t('studentGuardians.pickupPass')}</Text>
                   </TouchableOpacity>
                 </View>
               </Animated.View>
@@ -251,15 +265,15 @@ export default function AuthorizedGuardiansScreen() {
 
         <Modal visible={modalVisible} animationType="slide" transparent>
           <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-            <Pressable style={StyleSheet.absoluteFill} onPress={() => setModalVisible(false)} />
+            <Pressable style={StyleSheet.absoluteFill} onPress={closeModal} />
             <SafeAreaView style={styles.modalSheet} edges={['bottom']}>
               <View style={styles.sheetHandle} />
               <View style={styles.modalHeader}>
                 <View>
-                  <Text style={styles.modalTitle}>Add trusted person</Text>
-                  <Text style={styles.modalSub}>They’ll appear as a quick pick for pickup passes.</Text>
+                  <Text style={styles.modalTitle}>{t('studentGuardians.modalTitle')}</Text>
+                  <Text style={styles.modalSub}>{t('studentGuardians.modalSub')}</Text>
                 </View>
-                <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.closeBtn} accessibilityLabel="Close">
+                <TouchableOpacity onPress={closeModal} style={styles.closeBtn} accessibilityLabel={t('studentGuardians.close')}>
                   <Ionicons name="close" size={20} color={theme.colors.textMuted} />
                 </TouchableOpacity>
               </View>
@@ -267,23 +281,28 @@ export default function AuthorizedGuardiansScreen() {
               <ScrollView contentContainerStyle={styles.modalScroll} keyboardShouldPersistTaps="handled">
                 <TouchableOpacity style={styles.photoPicker} onPress={handlePickPhoto} activeOpacity={0.85}>
                   {photoUri ? (
-                    <Image source={{ uri: photoUri }} style={styles.pickerImg} />
+                    <>
+                      <Image source={{ uri: photoUri }} style={styles.pickerImg} />
+                      <View style={styles.photoChange}>
+                        <Ionicons name="camera" size={14} color="#FFFFFF" />
+                        <Text style={styles.photoChangeText}>{t('studentGuardians.changePhoto')}</Text>
+                      </View>
+                    </>
                   ) : (
                     <View style={styles.photoPlaceholder}>
                       <View style={styles.cameraWell}>
                         <Ionicons name="camera" size={22} color={ACCENT} />
                       </View>
-                      <Text style={styles.photoHint}>Add a clear face photo</Text>
-                      <Text style={styles.photoHintSub}>Helps gate security confirm identity</Text>
+                      <Text style={styles.photoHint}>{t('studentGuardians.addPhoto')}</Text>
+                      <Text style={styles.photoHintSub}>{t('studentGuardians.addPhotoSub')}</Text>
                     </View>
                   )}
                 </TouchableOpacity>
 
-                <Text style={styles.formLabel}>Full name</Text>
-                <TextInput
-                  style={styles.formInput}
-                  placeholder="e.g. Anand Sharma"
-                  placeholderTextColor={theme.colors.textMuted}
+                <Text style={styles.formLabel}>{t('studentGuardians.fullName')}</Text>
+                <AppTextInput
+                  style={[themeStyles.inputInChrome, styles.formInput]}
+                  placeholder={t('studentGuardians.namePlaceholder')}
                   value={name}
                   onChangeText={(t) => {
                     setName(t);
@@ -291,7 +310,7 @@ export default function AuthorizedGuardiansScreen() {
                   }}
                 />
 
-                <Text style={styles.formLabel}>Relationship</Text>
+                <Text style={styles.formLabel}>{t('studentGuardians.relationship')}</Text>
                 <View style={styles.relWrap}>
                   {RELATIONSHIPS.map((rel) => {
                     const isSelected = relationship === rel;
@@ -304,31 +323,31 @@ export default function AuthorizedGuardiansScreen() {
                           setRelationship(rel);
                         }}
                       >
-                        <Text style={[styles.relChipText, isSelected && styles.relChipTextOn]}>{rel}</Text>
+                        <Text style={[styles.relChipText, isSelected && styles.relChipTextOn]}>
+                          {t(`studentGuardians.rel.${rel.replace(/\s+/g, '')}`, rel)}
+                        </Text>
                       </TouchableOpacity>
                     );
                   })}
                 </View>
 
-                <Text style={styles.formLabel}>Phone number</Text>
-                <TextInput
-                  style={styles.formInput}
-                  placeholder="10-digit mobile"
-                  placeholderTextColor={theme.colors.textMuted}
+                <Text style={styles.formLabel}>{t('studentGuardians.phone')}</Text>
+                <AppTextInput
+                  style={[themeStyles.inputInChrome, styles.formInput]}
+                  placeholder={t('studentGuardians.phonePlaceholder')}
                   keyboardType="phone-pad"
                   maxLength={13}
                   value={mobile}
-                  onChangeText={(t) => {
-                    setMobile(t);
+                  onChangeText={(value) => {
+                    setMobile(value);
                     setFormError(null);
                   }}
                 />
 
-                <Text style={styles.formLabel}>ID last 4 digits (optional)</Text>
-                <TextInput
-                  style={styles.formInput}
-                  placeholder="e.g. Aadhaar · 1234"
-                  placeholderTextColor={theme.colors.textMuted}
+                <Text style={styles.formLabel}>{t('studentGuardians.idOptional')}</Text>
+                <AppTextInput
+                  style={[themeStyles.inputInChrome, styles.formInput]}
+                  placeholder={t('studentGuardians.idPlaceholder')}
                   value={idReference}
                   onChangeText={setIdReference}
                 />
@@ -340,7 +359,7 @@ export default function AuthorizedGuardiansScreen() {
                     {submitting ? (
                       <ActivityIndicator color="#FFFFFF" />
                     ) : (
-                      <Text style={styles.saveBtnText}>Save person</Text>
+                      <Text style={styles.saveBtnText}>{t('studentGuardians.save')}</Text>
                     )}
                   </LinearGradient>
                 </TouchableOpacity>
@@ -387,7 +406,7 @@ function createStyles(
       alignItems: 'center',
       justifyContent: 'center',
     },
-    scrollContent: { padding: 16, paddingBottom: 48 },
+    scrollContent: { padding: 16, paddingBottom: 48, width: '100%', maxWidth: 640, alignSelf: 'center' },
     policyBox: {
       ...clayCard(isDark, 'sm'),
       flexDirection: 'row',
@@ -566,6 +585,19 @@ function createStyles(
     },
     photoHint: { fontSize: 13, color: ACCENT, textAlign: 'center', fontWeight: '800' },
     photoHintSub: { fontSize: 11, color: colors.textMuted, textAlign: 'center', marginTop: 2 },
+    photoChange: {
+      position: 'absolute',
+      bottom: 10,
+      alignSelf: 'center',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: 'rgba(15,23,42,0.72)',
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 999,
+    },
+    photoChangeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
     formLabel: {
       fontSize: 11,
       fontWeight: '800',

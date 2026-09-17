@@ -7,6 +7,7 @@ import { clayCard } from '../../theme/clayStyles';
 import { CalendarEvent, SchoolDayStatus } from '../../services/calendarService';
 import { formatDayParts } from './CalendarTheme';
 import { CalendarEventCard } from './CalendarEventCard';
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   selectedDate: string;
@@ -26,10 +27,20 @@ export const CalendarDayView: React.FC<Props> = ({
   isAdmin = false,
 }) => {
   const { theme, isDark } = useTheme();
+  const { t, i18n } = useTranslation();
   const { width } = useWindowDimensions();
   const compact = width < 768;
   const styles = React.useMemo(() => getStyles(theme, isDark, compact), [theme, isDark, compact]);
-  const parts = formatDayParts(selectedDate);
+  const locale = i18n.language?.startsWith('te') ? 'te-IN' : 'en-IN';
+  const parts = formatDayParts(selectedDate, locale);
+  const relative =
+    parts.relativeKey === 'today'
+      ? t('studentCalendar.today')
+      : parts.relativeKey === 'tomorrow'
+        ? t('studentCalendar.tomorrow')
+        : parts.relativeKey === 'yesterday'
+          ? t('studentCalendar.yesterday')
+          : '';
 
   const isHoliday = !!dayStatus?.isHoliday;
   const isSpecial = !!dayStatus?.isSpecialWorkingDay;
@@ -46,10 +57,10 @@ export const CalendarDayView: React.FC<Props> = ({
         : ['#4F46E5', '#6366F1'];
 
   const statusLabel = isHoliday
-    ? dayStatus?.holidayName || 'School Closed'
+    ? dayStatus?.holidayName || t('studentCalendar.schoolClosed')
     : isSpecial
-      ? 'Special Working Day'
-      : 'Working Day';
+      ? t('studentCalendar.specialWorking')
+      : t('studentCalendar.workingDay');
 
   const statusIcon = isHoliday ? 'sunny' : isSpecial ? 'swap-horizontal' : 'briefcase-outline';
 
@@ -59,7 +70,7 @@ export const CalendarDayView: React.FC<Props> = ({
         <View style={styles.heroBlob} />
         <View style={styles.heroTop}>
           <View>
-            {parts.relative ? <Text style={styles.heroEyebrow}>{parts.relative.toUpperCase()}</Text> : null}
+            {relative ? <Text style={styles.heroEyebrow}>{relative.toUpperCase()}</Text> : null}
             <Text style={styles.heroWeekday}>{parts.weekday}</Text>
             <Text style={styles.heroMonth}>{parts.monthYear}</Text>
           </View>
@@ -84,7 +95,7 @@ export const CalendarDayView: React.FC<Props> = ({
                 ]}
               />
               <Text style={styles.heroChipText}>
-                {dayStatus.attendanceAllowed ? 'Attendance open' : 'Attendance closed'}
+                {dayStatus.attendanceAllowed ? t('studentCalendar.attendanceOpen') : t('studentCalendar.attendanceClosed')}
               </Text>
             </View>
           </View>
@@ -93,15 +104,15 @@ export const CalendarDayView: React.FC<Props> = ({
         {dayStatus ? (
           <Text style={styles.heroHint} numberOfLines={2}>
             {dayStatus.timetableOverride
-              ? `Timetable follows ${dayStatus.timetableDay} schedule`
-              : `Standard ${dayStatus.timetableDay} classes`}
+              ? t('studentCalendar.timetableFollows', { day: dayStatus.timetableDay })
+              : t('studentCalendar.standardClasses', { day: dayStatus.timetableDay })}
           </Text>
         ) : null}
       </LinearGradient>
 
       <View style={styles.eventsHeader}>
         <Text style={styles.sectionHeading}>
-          {events.length === 0 ? 'Schedule' : `${events.length} event${events.length === 1 ? '' : 's'}`}
+          {events.length === 0 ? t('studentCalendar.schedule') : t('studentCalendar.eventCount', { count: events.length })}
         </Text>
       </View>
 
@@ -114,11 +125,9 @@ export const CalendarDayView: React.FC<Props> = ({
               color={isDark ? '#A5B4FC' : '#4F46E5'}
             />
           </View>
-          <Text style={styles.emptyTitle}>{isHoliday ? 'School is closed' : 'Nothing extra scheduled'}</Text>
+          <Text style={styles.emptyTitle}>{isHoliday ? t('studentCalendar.closedTitle') : t('studentCalendar.nothingExtra')}</Text>
           <Text style={styles.emptySub}>
-            {isHoliday
-              ? 'Enjoy the break — classes resume on the next working day.'
-              : 'Regular classes follow the timetable for this day.'}
+            {isHoliday ? t('studentCalendar.enjoyBreak') : t('studentCalendar.regularClasses')}
           </Text>
           {isAdmin && onAddEventForDay ? (
             <TouchableOpacity
@@ -127,7 +136,7 @@ export const CalendarDayView: React.FC<Props> = ({
               activeOpacity={0.8}
             >
               <Ionicons name="add" size={16} color="#FFFFFF" />
-              <Text style={styles.emptyCtaText}>Schedule for this day</Text>
+              <Text style={styles.emptyCtaText}>{t('studentCalendar.scheduleForDay')}</Text>
             </TouchableOpacity>
           ) : null}
         </View>

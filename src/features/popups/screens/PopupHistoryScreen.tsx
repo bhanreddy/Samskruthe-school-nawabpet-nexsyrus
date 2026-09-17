@@ -17,6 +17,8 @@ import * as Haptics from '../../../utils/haptics';
 import { popupApi } from '../popupApi';
 import { sanitizeQueuedPopupId } from '../popupActionRegistry';
 import type { EligiblePopup, PopupCategory, PopupPriority } from '../types';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 
 type Filter = 'unread' | 'all';
 
@@ -43,27 +45,27 @@ function categoryMeta(category?: string) {
   return CATEGORY_META[(category || 'CUSTOM') as PopupCategory] || CATEGORY_META.CUSTOM;
 }
 
-function relativeTime(iso?: string | null): string {
+function relativeTime(iso: string | null | undefined, t: TFunction): string {
   if (!iso) return '';
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '';
   const diffMs = Date.now() - date.getTime();
   const minutes = Math.round(diffMs / 60000);
-  if (minutes < 1) return 'Just now';
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1) return t('studentUpdates.justNow');
+  if (minutes < 60) return t('studentUpdates.minutesAgo', { count: minutes });
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return t('studentUpdates.hoursAgo', { count: hours });
   const days = Math.round(hours / 24);
-  if (days === 1) return 'Yesterday';
-  if (days < 7) return `${days}d ago`;
+  if (days === 1) return t('studentUpdates.yesterday');
+  if (days < 7) return t('studentUpdates.daysAgo', { count: days });
   return date.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 }
 
-function statusLabel(item: EligiblePopup): string {
-  if (item.acknowledged_at) return 'Acknowledged';
-  if (item.dismissed_at) return 'Dismissed';
-  if (item.unread) return 'Unread';
-  return 'Read';
+function statusLabel(item: EligiblePopup, t: TFunction): string {
+  if (item.acknowledged_at) return t('studentUpdates.acknowledged');
+  if (item.dismissed_at) return t('studentUpdates.dismissed');
+  if (item.unread) return t('studentUpdates.unread');
+  return t('studentUpdates.read');
 }
 
 function priorityTint(priority?: PopupPriority) {
@@ -74,6 +76,7 @@ function priorityTint(priority?: PopupPriority) {
 
 export default function PopupHistoryScreen({ embedded = false }: { embedded?: boolean }) {
   const { theme, isDark } = useTheme();
+  const { t } = useTranslation();
   const router = useRouter();
   const params = useLocalSearchParams<{ popupId?: string }>();
   const focusId = sanitizeQueuedPopupId(typeof params.popupId === 'string' ? params.popupId : null);
@@ -81,6 +84,7 @@ export default function PopupHistoryScreen({ embedded = false }: { embedded?: bo
   const [filter, setFilter] = useState<Filter>('unread');
   const [refreshing, setRefreshing] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
 
   const load = useCallback(async (refresh = false) => {
     if (refresh) setRefreshing(true);
@@ -91,6 +95,7 @@ export default function PopupHistoryScreen({ embedded = false }: { embedded?: bo
       setItems([]);
     } finally {
       setRefreshing(false);
+      setReady(true);
     }
   }, []);
 
@@ -126,8 +131,8 @@ export default function PopupHistoryScreen({ embedded = false }: { embedded?: bo
     <View style={[styles.screen, embedded && { paddingTop: 0 }]}>
       <View style={styles.filters}>
         {([
-          { key: 'unread' as Filter, label: 'Unread', count: unreadCount },
-          { key: 'all' as Filter, label: 'Recent', count: items.length },
+          { key: 'unread' as Filter, label: t('studentUpdates.unread'), count: unreadCount },
+          { key: 'all' as Filter, label: t('studentUpdates.recent'), count: items.length },
         ]).map((tab) => {
           const on = filter === tab.key;
           return (
@@ -160,30 +165,36 @@ export default function PopupHistoryScreen({ embedded = false }: { embedded?: bo
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
       >
-        {visible.length === 0 ? (
+        {!ready ? (
+          <View style={styles.empty}>
+            <Text style={styles.emptyCopy}>{t('studentUpdates.checking')}</Text>
+          </View>
+        ) : visible.length === 0 ? (
           <Animated.View entering={FadeIn.duration(280)} style={styles.empty}>
             <View style={styles.emptyIcon}>
               <Ionicons
-                name={filter === 'unread' ? 'checkmark-circle-outline' : 'notifications-off-outline'}
+                name={filter === 'unread' ? 'sparkles-outline' : 'notifications-off-outline'}
                 size={30}
                 color={theme.colors.primary}
               />
             </View>
             <Text style={styles.emptyTitle}>
-              {filter === 'unread' ? "You're all caught up" : 'No updates yet'}
+              {filter === 'unread' ? t('studentUpdates.caughtUp') : t('studentUpdates.noneYet')}
             </Text>
             <Text style={styles.emptyCopy}>
-              {filter === 'unread'
-                ? 'There are no unread school messages. Switch to Recent to review earlier updates.'
-                : 'Important school messages will appear here if you miss a popup.'}
+              {filter === 'unread' ? t('studentUpdates.caughtUpCopy') : t('studentUpdates.noneCopy')}
             </Text>
             {filter === 'unread' && items.length > 0 ? (
               <Pressable
-                onPress={() => setFilter('all')}
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  setFilter('all');
+                }}
                 style={styles.emptyAction}
                 accessibilityRole="button"
               >
-                <Text style={styles.emptyActionText}>View recent messages</Text>
+                <Text style={styles.emptyActionText}>{t('studentUpdates.viewRecent')}</Text>
+                <Ionicons name="arrow-forward" size={14} color="#FFFFFF" />
               </Pressable>
             ) : null}
           </Animated.View>
@@ -212,13 +223,15 @@ export default function PopupHistoryScreen({ embedded = false }: { embedded?: bo
                         <Ionicons name={meta.icon} size={16} color={meta.color} />
                       </View>
                       <View style={styles.headCopy}>
-                        <Text style={[styles.category, { color: meta.color }]}>{meta.label}</Text>
-                        <Text style={styles.when}>{relativeTime(item.start_at) || statusLabel(item)}</Text>
+                        <Text style={[styles.category, { color: meta.color }]}>
+                          {t(`studentUpdates.category.${item.category}`, meta.label)}
+                        </Text>
+                        <Text style={styles.when}>{relativeTime(item.start_at, t) || statusLabel(item, t)}</Text>
                       </View>
                       {item.unread ? (
                         <View style={styles.unreadPill}>
                           <View style={styles.dot} />
-                          <Text style={styles.unreadText}>New</Text>
+                          <Text style={styles.unreadText}>{t('studentUpdates.new')}</Text>
                         </View>
                       ) : (
                         <Ionicons
@@ -232,7 +245,7 @@ export default function PopupHistoryScreen({ embedded = false }: { embedded?: bo
                     <Text style={styles.message} numberOfLines={expanded ? 12 : 3}>
                       {item.message}
                     </Text>
-                    <Text style={styles.meta}>{statusLabel(item)}</Text>
+                    <Text style={styles.meta}>{statusLabel(item, t)}</Text>
                   </View>
                 </Pressable>
               </Animated.View>
@@ -242,7 +255,7 @@ export default function PopupHistoryScreen({ embedded = false }: { embedded?: bo
       </ScrollView>
       {!embedded ? (
         <Pressable onPress={() => router.back()} style={styles.back} accessibilityRole="button" accessibilityLabel="Go back">
-          <Text style={styles.backText}>Close</Text>
+          <Text style={styles.backText}>{t('studentUpdates.close')}</Text>
         </Pressable>
       ) : null}
     </View>
@@ -270,6 +283,9 @@ function createStyles(
       gap: 4,
       borderRadius: 16,
       backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(15,23,42,0.045)',
+      width: '92%',
+      maxWidth: 560,
+      alignSelf: 'center',
     },
     chip: {
       flex: 1,
@@ -298,8 +314,15 @@ function createStyles(
     countOn: { backgroundColor: colors.primary },
     countText: { fontSize: 11, fontWeight: '800', color: isDark ? '#E2E8F0' : '#334155' },
     countTextOn: { color: '#FFFFFF' },
-    list: { padding: 16, paddingBottom: 48, gap: 12 },
-    empty: { alignItems: 'center', paddingTop: 72, paddingHorizontal: 28, gap: 8 },
+    list: { padding: 16, paddingBottom: 48, gap: 12, flexGrow: 1, width: '100%', maxWidth: 640, alignSelf: 'center' },
+    empty: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingTop: 48,
+      paddingHorizontal: 28,
+      gap: 8,
+      flexGrow: 1,
+    },
     emptyIcon: {
       width: 72,
       height: 72,
@@ -311,6 +334,17 @@ function createStyles(
     },
     emptyTitle: { fontSize: 20, fontWeight: '800', color: colors.textStrong, letterSpacing: -0.3, textAlign: 'center' },
     emptyCopy: { fontSize: 14, lineHeight: 21, color: colors.textMuted, textAlign: 'center', maxWidth: 300 },
+    emptyAction: {
+      marginTop: 10,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: colors.primary,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderRadius: 14,
+    },
+    emptyActionText: { color: '#FFFFFF', fontWeight: '800', fontSize: 13 },
     card: {
       ...clayCard(isDark, 'sm'),
       flexDirection: 'row',

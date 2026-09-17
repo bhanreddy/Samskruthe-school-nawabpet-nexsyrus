@@ -139,7 +139,7 @@ const homeTabs: HomeTab[] = [
   },
   {
     key: 'updates',
-    translationKey: 'updates', title: 'Updates',
+    translationKey: 'studentUpdates.title', title: 'Updates',
     subtitleKey: 'dashboard.featureSubtitles.broadcast_updates',
     image: require('../../assets/images/student-actions/updates-clay.png'),
     grad: ['#4C1D95', '#6D28D9', '#C4B5FD'],
@@ -219,7 +219,7 @@ const homeTabs: HomeTab[] = [
   },
   {
     key: 'visitSchool',
-    translationKey: 'visitSchool',
+    translationKey: 'studentVisitSchool.title',
     title: 'Visit School',
     subtitleKey: 'dashboard.featureSubtitles.visit_school',
     image: require('../../assets/images/student-actions/visit-school-clay.png'),
@@ -228,7 +228,7 @@ const homeTabs: HomeTab[] = [
   },
   {
     key: 'studentPickup',
-    translationKey: 'studentPickup',
+    translationKey: 'studentPickupPass.title',
     title: 'Student Pickup',
     subtitleKey: 'dashboard.featureSubtitles.student_pickup',
     image: require('../../assets/images/student-actions/student-pickup-clay.png'),
@@ -237,7 +237,7 @@ const homeTabs: HomeTab[] = [
   },
   {
     key: 'authorizedGuardians',
-    translationKey: 'authorizedGuardians',
+    translationKey: 'studentGuardians.title',
     title: 'Guardians',
     subtitleKey: 'dashboard.featureSubtitles.authorized_guardians',
     image: require('../../assets/images/student-actions/guardians-clay.png'),
@@ -246,7 +246,7 @@ const homeTabs: HomeTab[] = [
   },
   {
     key: 'calendar',
-    translationKey: 'academicCalendar',
+    translationKey: 'studentCalendar.title',
     title: 'Academic Calendar',
     subtitleKey: 'dashboard.featureSubtitles.academic_calendar',
     image: require('../../assets/images/student-actions/calendar-clay.png'),
@@ -255,7 +255,7 @@ const homeTabs: HomeTab[] = [
   },
   {
     key: 'events',
-    translationKey: 'paperlessEvents',
+    translationKey: 'studentEventDesk.title',
     title: 'Paperless Event Desk',
     subtitleKey: 'dashboard.featureSubtitles.event_desk',
     image: require('../../assets/images/student-actions/event-desk-clay.png'),

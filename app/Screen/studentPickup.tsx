@@ -12,7 +12,7 @@ import {
   Image,
   KeyboardAvoidingView,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import QRCode from 'react-native-qrcode-svg';
@@ -24,6 +24,7 @@ import StudentSubpageHeader from '@/src/components/StudentSubpageHeader';
 import * as Haptics from '@/src/utils/haptics';
 import { useAuth } from '@/src/hooks/useAuth';
 import { useTheme } from '@/src/hooks/useTheme';
+import { useTranslation } from 'react-i18next';
 import { clayCard, clayInset } from '@/src/theme/clayStyles';
 import { schoolColorWithAlpha } from '@/src/constants/schoolConfig';
 import {
@@ -34,22 +35,46 @@ import {
 
 const ACCENT = '#059669';
 const RELATIONSHIPS = ['Parent', 'Father', 'Mother', 'Grandparent', 'Uncle', 'Aunt', 'Family Driver', 'Other'];
+const TIME_PRESETS = [
+  { id: 'afterSchool' as const, start: '15:00', end: '16:30' },
+  { id: 'evening' as const, start: '16:30', end: '18:00' },
+  { id: 'morning' as const, start: '08:00', end: '10:00' },
+];
+
+function toYmd(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function addDays(days: number) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return toYmd(date);
+}
 
 function formatWindow(start?: string, end?: string) {
   return [start, end].filter(Boolean).join(' – ');
 }
 
-function formatPickupDate(value?: string) {
+function formatPickupDate(value?: string, todayLabel = 'Today', tomorrowLabel = 'Tomorrow') {
   if (!value) return '';
   const date = new Date(`${value}T00:00:00`);
   if (Number.isNaN(date.getTime())) return value;
+  const today = toYmd();
+  const tomorrow = addDays(1);
+  if (value === today) return todayLabel;
+  if (value === tomorrow) return tomorrowLabel;
   return date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
 export default function StudentPickupScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ guardianId?: string }>();
   const { portalContexts } = useAuth();
   const { theme, isDark } = useTheme();
+  const { t } = useTranslation();
 
   const [activeTab, setActiveTab] = useState<'request' | 'active'>('request');
   const [loading, setLoading] = useState(false);
@@ -101,6 +126,16 @@ export default function StudentPickupScreen() {
     void loadData();
   }, [loadData]);
 
+  useEffect(() => {
+    if (!params.guardianId || guardians.length === 0) return;
+    const match = guardians.find((g) => g.id === params.guardianId);
+    if (!match) return;
+    setSelectedGuardianId(match.id);
+    setPickupName(match.name);
+    setPickupRelationship(match.relationship || 'Parent');
+    setPickupMobile(match.mobile);
+  }, [params.guardianId, guardians]);
+
   const selectGuardian = (g: AuthorizedGuardian) => {
     Haptics.selectionAsync();
     setSelectedGuardianId(g.id);
@@ -118,11 +153,11 @@ export default function StudentPickupScreen() {
 
   const handleCreatePickup = async () => {
     if (!pickupName.trim()) {
-      Alert.alert('Missing name', 'Please enter the name of the person picking up the student.');
+      Alert.alert(t('studentPickupPass.missingNameTitle'), t('studentPickupPass.missingName'));
       return;
     }
     if (!pickupMobile.trim()) {
-      Alert.alert('Missing mobile', 'Please enter the contact mobile number.');
+      Alert.alert(t('studentPickupPass.missingMobileTitle'), t('studentPickupPass.missingMobile'));
       return;
     }
 
@@ -152,7 +187,7 @@ export default function StudentPickupScreen() {
       setActivePickups((prev) => [res.authorization, ...prev.filter((p) => p.id !== res.authorization.id)]);
       setActiveTab('active');
     } catch (err: any) {
-      Alert.alert('Pickup request error', err?.message || 'Failed to authorize student pickup.');
+      Alert.alert(t('studentPickupPass.errorTitle'), err?.message || t('studentPickupPass.errorBody'));
     } finally {
       setSubmitting(false);
     }
@@ -161,10 +196,19 @@ export default function StudentPickupScreen() {
   const onSharePickupPass = async (pass: PickupAuthorization, otp?: string) => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      const msg = `School Student Pickup Pass\nStudent: ${pass.student_name || 'Enrolled Student'}\nAuthorized: ${pass.pickup_name} (${pass.pickup_relationship})\nDate: ${pass.pickup_date} (${pass.valid_start_time} - ${pass.valid_end_time})\nPass Code: ${pass.pass_code}${otp ? `\nSecurity Verification OTP: ${otp}` : ''}\nPlease show this pass to gate security for student handover.`;
+      const otpLine = otp ? t('studentPickupPass.otpLine', { otp }) : '';
+      const msg = t('studentPickupPass.shareMessage', {
+        student: pass.student_name || t('roles.student_singular'),
+        name: pass.pickup_name,
+        relationship: t(`studentPickupPass.rel.${(pass.pickup_relationship || '').replace(/\s+/g, '')}`, pass.pickup_relationship),
+        date: pass.pickup_date,
+        window: `${pass.valid_start_time} - ${pass.valid_end_time}`,
+        code: pass.pass_code,
+        otp: otpLine,
+      });
       await Share.share({
         message: msg,
-        title: `Student Pickup Pass - ${pass.pass_code}`,
+        title: t('studentPickupPass.shareTitle', { code: pass.pass_code }),
       });
     } catch (e) {
       console.warn('Share error:', e);
@@ -176,20 +220,29 @@ export default function StudentPickupScreen() {
     : activePickups;
 
   const webInput = (type: string) => (Platform.OS === 'web' ? ({ type } as any) : {});
+  const todayYmd = toYmd();
+  const tomorrowYmd = addDays(1);
+  const dateChips = [
+    { label: t('studentPickupPass.today'), value: todayYmd },
+    { label: t('studentPickupPass.tomorrow'), value: tomorrowYmd },
+  ];
+  const dateLabel = (value?: string) =>
+    formatPickupDate(value, t('studentPickupPass.today'), t('studentPickupPass.tomorrow'));
+  const canSubmit = pickupName.trim().length > 1 && pickupMobile.trim().length >= 10;
 
   return (
     <ScreenLayout>
       <View style={styles.root}>
         <StudentSubpageHeader
-          title="Pickup Pass"
-          subtitle="Secure gate clearance for child handover"
+          title={t('studentPickupPass.title')}
+          subtitle={t('studentPickupPass.subtitle')}
           onBack={() => router.back()}
           right={
             <TouchableOpacity
               style={styles.headerAction}
               onPress={() => router.push('/Screen/authorizedGuardians' as any)}
               accessibilityRole="button"
-              accessibilityLabel="Manage authorized guardians"
+              accessibilityLabel={t('studentPickupPass.manageGuardians')}
             >
               <Ionicons name="people-outline" size={18} color={ACCENT} />
             </TouchableOpacity>
@@ -198,8 +251,8 @@ export default function StudentPickupScreen() {
 
         <View style={styles.tabTrack}>
           {([
-            { key: 'request' as const, label: 'Authorize', icon: 'shield-checkmark-outline' as const },
-            { key: 'active' as const, label: 'Active passes', icon: 'qr-code-outline' as const, count: activePickups.length },
+            { key: 'request' as const, label: t('studentPickupPass.authorize'), icon: 'shield-checkmark-outline' as const },
+            { key: 'active' as const, label: t('studentPickupPass.activePasses'), icon: 'qr-code-outline' as const, count: activePickups.length },
           ]).map((tab) => {
             const on = activeTab === tab.key;
             return (
@@ -242,9 +295,9 @@ export default function StudentPickupScreen() {
                 {guardians.length > 0 ? (
                   <Animated.View entering={FadeInDown.duration(240)} style={styles.sectionBlock}>
                     <View style={styles.sectionTitleRow}>
-                      <Text style={styles.sectionTitle}>Who is picking up?</Text>
+                      <Text style={styles.sectionTitle}>{t('studentPickupPass.whoPickup')}</Text>
                       <TouchableOpacity onPress={() => router.push('/Screen/authorizedGuardians' as any)}>
-                        <Text style={styles.manageLink}>Manage</Text>
+                        <Text style={styles.manageLink}>{t('studentPickupPass.manage')}</Text>
                       </TouchableOpacity>
                     </View>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.guardiansRow}>
@@ -261,11 +314,15 @@ export default function StudentPickupScreen() {
                               {g.photo_url ? (
                                 <Image source={{ uri: g.photo_url }} style={styles.avatarImg} />
                               ) : (
-                                <Text style={styles.avatarInitial}>{g.name.charAt(0).toUpperCase()}</Text>
+                                <Text style={[styles.avatarInitial, isSelected && styles.avatarInitialOn]}>
+                                  {g.name.charAt(0).toUpperCase()}
+                                </Text>
                               )}
                             </View>
                             <Text style={styles.guardianName} numberOfLines={1}>{g.name}</Text>
-                            <Text style={styles.guardianRel} numberOfLines={1}>{g.relationship}</Text>
+                            <Text style={styles.guardianRel} numberOfLines={1}>
+                              {t(`studentPickupPass.rel.${g.relationship.replace(/\s+/g, '')}`, g.relationship)}
+                            </Text>
                             {isSelected ? (
                               <View style={styles.selectedBadge}>
                                 <Ionicons name="checkmark" size={11} color="#FFFFFF" />
@@ -286,31 +343,31 @@ export default function StudentPickupScreen() {
                       <Ionicons name="person-add-outline" size={18} color={ACCENT} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.promptTitle}>Save a guardian for faster pickups</Text>
-                      <Text style={styles.promptCopy}>Add family or a driver once, then generate a pass in one tap.</Text>
+                      <Text style={styles.promptTitle}>{t('studentPickupPass.saveGuardian')}</Text>
+                      <Text style={styles.promptCopy}>{t('studentPickupPass.saveGuardianCopy')}</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={16} color={theme.colors.textMuted} />
                   </TouchableOpacity>
                 )}
 
                 <View style={styles.formCard}>
-                  <Text style={styles.cardTitle}>Pickup details</Text>
-                  <Text style={styles.cardHint}>Gate security will verify this person before handover.</Text>
+                  <Text style={styles.cardTitle}>{t('studentPickupPass.details')}</Text>
+                  <Text style={styles.cardHint}>{t('studentPickupPass.detailsHint')}</Text>
 
-                  <Text style={styles.inputLabel}>Full name</Text>
+                  <Text style={styles.inputLabel}>{t('studentPickupPass.fullName')}</Text>
                   <AppTextInput
                     style={[themeStyles.inputInChrome, styles.input, inset('name')]}
-                    placeholder="e.g. Rajesh Kumar"
+                    placeholder={t('studentPickupPass.namePlaceholder')}
                     value={pickupName}
-                    onChangeText={(t) => {
-                      setPickupName(t);
+                    onChangeText={(value) => {
+                      setPickupName(value);
                       if (selectedGuardianId) setSelectedGuardianId(null);
                     }}
                     onFocus={() => setFocusedField('name')}
                     onBlur={() => setFocusedField(null)}
                   />
 
-                  <Text style={styles.inputLabel}>Relationship</Text>
+                  <Text style={styles.inputLabel}>{t('studentPickupPass.relationship')}</Text>
                   <View style={styles.chipWrap}>
                     {RELATIONSHIPS.map((rel) => {
                       const on = pickupRelationship === rel;
@@ -323,16 +380,18 @@ export default function StudentPickupScreen() {
                             setPickupRelationship(rel);
                           }}
                         >
-                          <Text style={[styles.relChipText, on && styles.relChipTextOn]}>{rel}</Text>
+                          <Text style={[styles.relChipText, on && styles.relChipTextOn]}>
+                            {t(`studentPickupPass.rel.${rel.replace(/\s+/g, '')}`, rel)}
+                          </Text>
                         </TouchableOpacity>
                       );
                     })}
                   </View>
 
-                  <Text style={styles.inputLabel}>Mobile number</Text>
+                  <Text style={styles.inputLabel}>{t('studentPickupPass.mobile')}</Text>
                   <AppTextInput
                     style={[themeStyles.inputInChrome, styles.input, inset('mobile')]}
-                    placeholder="e.g. 9876543210"
+                    placeholder={t('studentPickupPass.mobilePlaceholder')}
                     keyboardType="phone-pad"
                     value={pickupMobile}
                     onChangeText={setPickupMobile}
@@ -342,7 +401,24 @@ export default function StudentPickupScreen() {
 
                   <View style={styles.rowInputs}>
                     <View style={styles.flex1}>
-                      <Text style={styles.inputLabel}>Pickup date</Text>
+                      <Text style={styles.inputLabel}>{t('studentPickupPass.pickupDate')}</Text>
+                      <View style={styles.chipWrap}>
+                        {dateChips.map((chip) => {
+                          const on = pickupDate === chip.value;
+                          return (
+                            <TouchableOpacity
+                              key={chip.value}
+                              style={[styles.relChip, on && styles.relChipOn]}
+                              onPress={() => {
+                                Haptics.selectionAsync();
+                                setPickupDate(chip.value);
+                              }}
+                            >
+                              <Text style={[styles.relChipText, on && styles.relChipTextOn]}>{chip.label}</Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
                       <AppTextInput
                         style={[themeStyles.inputInChrome, styles.input, inset('date')]}
                         value={pickupDate}
@@ -353,7 +429,27 @@ export default function StudentPickupScreen() {
                       />
                     </View>
                     <View style={styles.flex1}>
-                      <Text style={styles.inputLabel}>Time window</Text>
+                      <Text style={styles.inputLabel}>{t('studentPickupPass.timeWindow')}</Text>
+                      <View style={styles.chipWrap}>
+                        {TIME_PRESETS.map((preset) => {
+                          const on = startTime === preset.start && endTime === preset.end;
+                          return (
+                            <TouchableOpacity
+                              key={preset.id}
+                              style={[styles.relChip, on && styles.relChipOn]}
+                              onPress={() => {
+                                Haptics.selectionAsync();
+                                setStartTime(preset.start);
+                                setEndTime(preset.end);
+                              }}
+                            >
+                              <Text style={[styles.relChipText, on && styles.relChipTextOn]}>
+                                {t(`studentPickupPass.${preset.id}`)}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
                       <View style={styles.timeRow}>
                         <AppTextInput
                           style={[themeStyles.inputInChrome, styles.smallInput, inset('start')]}
@@ -376,10 +472,10 @@ export default function StudentPickupScreen() {
                     </View>
                   </View>
 
-                  <Text style={styles.inputLabel}>Vehicle number <Text style={styles.optional}>(optional)</Text></Text>
+                  <Text style={styles.inputLabel}>{t('studentPickupPass.vehicleOptional')}</Text>
                   <AppTextInput
                     style={[themeStyles.inputInChrome, styles.input, inset('vehicle')]}
-                    placeholder="e.g. KA-01-AB-1234"
+                    placeholder={t('studentPickupPass.vehiclePlaceholder')}
                     autoCapitalize="characters"
                     value={vehicleNumber}
                     onChangeText={setVehicleNumber}
@@ -387,10 +483,10 @@ export default function StudentPickupScreen() {
                     onBlur={() => setFocusedField(null)}
                   />
 
-                  <Text style={styles.inputLabel}>Reason / notes <Text style={styles.optional}>(optional)</Text></Text>
+                  <Text style={styles.inputLabel}>{t('studentPickupPass.notesOptional')}</Text>
                   <AppTextInput
                     style={[themeStyles.inputInChrome, styles.textArea, inset('notes')]}
-                    placeholder="e.g. Early doctor appointment"
+                    placeholder={t('studentPickupPass.notesPlaceholder')}
                     multiline
                     value={notes}
                     onChangeText={setNotes}
@@ -398,11 +494,21 @@ export default function StudentPickupScreen() {
                     onBlur={() => setFocusedField(null)}
                   />
 
+                  {canSubmit ? (
+                    <View style={styles.summary}>
+                      <Ionicons name="shield-checkmark" size={16} color={ACCENT} />
+                      <Text style={styles.summaryText}>
+                        {pickupName.trim()} · {t(`studentPickupPass.rel.${pickupRelationship.replace(/\s+/g, '')}`, pickupRelationship)} · {dateLabel(pickupDate)} · {formatWindow(startTime, endTime)}
+                      </Text>
+                    </View>
+                  ) : null}
+
                   <TouchableOpacity
-                    style={styles.submitBtn}
+                    style={[styles.submitBtn, !canSubmit && styles.submitBtnOff]}
                     onPress={handleCreatePickup}
-                    disabled={submitting}
+                    disabled={submitting || !canSubmit}
                     activeOpacity={0.9}
+                    accessibilityState={{ disabled: !canSubmit || submitting }}
                   >
                     <LinearGradient
                       colors={['#047857', '#10B981']}
@@ -415,7 +521,7 @@ export default function StudentPickupScreen() {
                       ) : (
                         <>
                           <Ionicons name="qr-code-outline" size={18} color="#FFFFFF" />
-                          <Text style={styles.btnText}>Generate secure pass</Text>
+                          <Text style={styles.btnText}>{t('studentPickupPass.generate')}</Text>
                         </>
                       )}
                     </LinearGradient>
@@ -427,10 +533,8 @@ export default function StudentPickupScreen() {
                     <Ionicons name="shield-checkmark" size={18} color={ACCENT} />
                   </View>
                   <View style={styles.bannerTextCol}>
-                    <Text style={styles.bannerTitle}>Verified handover only</Text>
-                    <Text style={styles.bannerDesc}>
-                      Gate security scans the QR pass and confirms the OTP before any student is released outside regular bus routes.
-                    </Text>
+                    <Text style={styles.bannerTitle}>{t('studentPickupPass.verifiedHandover')}</Text>
+                    <Text style={styles.bannerDesc}>{t('studentPickupPass.verifiedCopy')}</Text>
                   </View>
                 </View>
               </View>
@@ -440,7 +544,7 @@ export default function StudentPickupScreen() {
                   <Animated.View entering={FadeInDown.duration(280)} style={styles.highlightCard}>
                     <View style={styles.highlightBadge}>
                       <Ionicons name="checkmark-circle" size={16} color={ACCENT} />
-                      <Text style={styles.highlightBadgeText}>Pass ready</Text>
+                      <Text style={styles.highlightBadgeText}>{t('studentPickupPass.passReady')}</Text>
                     </View>
 
                     <View style={styles.qrCenterBox}>
@@ -451,25 +555,25 @@ export default function StudentPickupScreen() {
                         backgroundColor="#FFFFFF"
                       />
                       <Text style={styles.passCodeLabel}>
-                        Pass code{' '}
+                        {t('studentPickupPass.passCode')}{' '}
                         <Text style={styles.bold}>{newlyCreatedPass.authorization.pass_code}</Text>
                       </Text>
                     </View>
 
                     {newlyCreatedPass.otp ? (
                       <View style={styles.otpBox}>
-                        <Text style={styles.otpHeader}>One-time release OTP</Text>
+                        <Text style={styles.otpHeader}>{t('studentPickupPass.otpHeader')}</Text>
                         <Text style={styles.otpDigits}>{newlyCreatedPass.otp}</Text>
-                        <Text style={styles.otpSub}>Share this 6-digit code with the person at the gate</Text>
+                        <Text style={styles.otpSub}>{t('studentPickupPass.otpSub')}</Text>
                       </View>
                     ) : null}
 
                     <View style={styles.metaBox}>
                       <Text style={styles.metaStrong}>{newlyCreatedPass.authorization.pickup_name}</Text>
                       <Text style={styles.metaMuted}>
-                        {newlyCreatedPass.authorization.pickup_relationship}
+                        {t(`studentPickupPass.rel.${newlyCreatedPass.authorization.pickup_relationship.replace(/\s+/g, '')}`, newlyCreatedPass.authorization.pickup_relationship)}
                         {' · '}
-                        {formatPickupDate(newlyCreatedPass.authorization.pickup_date)}
+                        {dateLabel(newlyCreatedPass.authorization.pickup_date)}
                         {' · '}
                         {formatWindow(newlyCreatedPass.authorization.valid_start_time, newlyCreatedPass.authorization.valid_end_time)}
                       </Text>
@@ -480,7 +584,7 @@ export default function StudentPickupScreen() {
                       onPress={() => onSharePickupPass(newlyCreatedPass.authorization, newlyCreatedPass.otp)}
                     >
                       <Ionicons name="share-outline" size={18} color="#FFFFFF" />
-                      <Text style={styles.sharePickupBtnText}>Share pass with guardian</Text>
+                      <Text style={styles.sharePickupBtnText}>{t('studentPickupPass.sharePass')}</Text>
                     </TouchableOpacity>
                   </Animated.View>
                 ) : null}
@@ -488,7 +592,7 @@ export default function StudentPickupScreen() {
                 {loading && activePickups.length === 0 && !newlyCreatedPass ? (
                   <View style={styles.emptyState}>
                     <ActivityIndicator color={ACCENT} />
-                    <Text style={styles.emptySub}>Loading passes…</Text>
+                    <Text style={styles.emptySub}>{t('studentPickupPass.loadingPasses')}</Text>
                   </View>
                 ) : null}
 
@@ -505,12 +609,12 @@ export default function StudentPickupScreen() {
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text style={styles.passName}>{pass.pickup_name}</Text>
                         <Text style={styles.passMeta}>
-                          {pass.pickup_relationship} · {formatPickupDate(pass.pickup_date)} · {formatWindow(pass.valid_start_time, pass.valid_end_time)}
+                          {t(`studentPickupPass.rel.${pass.pickup_relationship.replace(/\s+/g, '')}`, pass.pickup_relationship)} · {dateLabel(pass.pickup_date)} · {formatWindow(pass.valid_start_time, pass.valid_end_time)}
                         </Text>
                         <Text style={styles.passCode}>#{pass.pass_code}</Text>
                       </View>
                       <View style={styles.statusPill}>
-                        <Text style={styles.statusPillText}>{pass.status || 'ACTIVE'}</Text>
+                        <Text style={styles.statusPillText}>{t(`studentPickupPass.status.${pass.status || 'ACTIVE'}`, pass.status || 'ACTIVE')}</Text>
                       </View>
                     </View>
                     <TouchableOpacity
@@ -518,7 +622,7 @@ export default function StudentPickupScreen() {
                       onPress={() => onSharePickupPass(pass)}
                     >
                       <Ionicons name="share-outline" size={14} color={ACCENT} />
-                      <Text style={styles.shareGhostText}>Share pass</Text>
+                      <Text style={styles.shareGhostText}>{t('studentPickupPass.sharePassShort')}</Text>
                     </TouchableOpacity>
                   </Animated.View>
                 ))}
@@ -528,12 +632,10 @@ export default function StudentPickupScreen() {
                     <View style={styles.emptyIcon}>
                       <Ionicons name="car-outline" size={30} color={ACCENT} />
                     </View>
-                    <Text style={styles.emptyTitle}>No active pickup passes</Text>
-                    <Text style={styles.emptySub}>
-                      Authorize a parent, relative, or driver to pick up your child at the gate.
-                    </Text>
+                    <Text style={styles.emptyTitle}>{t('studentPickupPass.emptyTitle')}</Text>
+                    <Text style={styles.emptySub}>{t('studentPickupPass.emptySub')}</Text>
                     <TouchableOpacity style={styles.createFirstBtn} onPress={() => setActiveTab('request')}>
-                      <Text style={styles.createFirstBtnText}>Create a pass</Text>
+                      <Text style={styles.createFirstBtnText}>{t('studentPickupPass.createPass')}</Text>
                     </TouchableOpacity>
                   </Animated.View>
                 ) : null}
@@ -570,6 +672,9 @@ function createStyles(
       gap: 4,
       borderRadius: 16,
       backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(15,23,42,0.045)',
+      maxWidth: 560,
+      alignSelf: 'center',
+      width: '92%',
     },
     tabItem: {
       flex: 1,
@@ -594,7 +699,7 @@ function createStyles(
     tabCountOn: { backgroundColor: ACCENT },
     tabCountText: { fontSize: 11, fontWeight: '800', color: colors.textMuted },
     tabCountTextOn: { color: '#FFFFFF' },
-    scrollContent: { padding: 16, paddingBottom: 48 },
+    scrollContent: { padding: 16, paddingBottom: 48, width: '100%', maxWidth: 640, alignSelf: 'center' },
     sectionBlock: { marginBottom: 16 },
     sectionTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
     sectionTitle: { fontSize: 15, fontWeight: '800', color: colors.textStrong, letterSpacing: -0.2 },
@@ -625,6 +730,7 @@ function createStyles(
     guardianAvatarOn: { backgroundColor: ACCENT },
     avatarImg: { width: '100%', height: '100%' },
     avatarInitial: { fontSize: 16, fontWeight: '800', color: ACCENT },
+    avatarInitialOn: { color: '#FFFFFF' },
     guardianName: { fontSize: 12, fontWeight: '800', textAlign: 'center', color: colors.textStrong },
     guardianRel: { fontSize: 11, textAlign: 'center', marginTop: 2, color: colors.textMuted, fontWeight: '600' },
     selectedBadge: {
@@ -706,8 +812,8 @@ function createStyles(
     },
     relChipText: { fontSize: 12, fontWeight: '700', color: colors.textStrong },
     relChipTextOn: { color: '#FFFFFF' },
-    rowInputs: { flexDirection: 'row', gap: 10 },
-    flex1: { flex: 1 },
+    rowInputs: { flexDirection: 'column', gap: 4 },
+    flex1: { width: '100%' },
     timeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     smallInput: {
       flex: 1,
@@ -719,7 +825,18 @@ function createStyles(
       color: colors.textStrong,
     },
     timeDash: { color: colors.textMuted, fontWeight: '700' },
-    submitBtn: { marginTop: 20, borderRadius: 16, overflow: 'hidden' },
+    summary: {
+      marginTop: 16,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      padding: 12,
+      borderRadius: 14,
+      backgroundColor: isDark ? 'rgba(16,185,129,0.12)' : '#ECFDF5',
+    },
+    summaryText: { flex: 1, fontSize: 13, lineHeight: 18, fontWeight: '700', color: isDark ? '#6EE7B7' : '#047857' },
+    submitBtn: { marginTop: 16, borderRadius: 16, overflow: 'hidden' },
+    submitBtnOff: { opacity: 0.45 },
     gradientBtn: {
       flexDirection: 'row',
       alignItems: 'center',

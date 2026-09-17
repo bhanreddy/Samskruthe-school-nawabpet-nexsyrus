@@ -6,6 +6,7 @@ import { clayCard, clayInset } from '../../theme/clayStyles';
 import { CalendarEvent, CalendarEventType } from '../../services/calendarService';
 import { formatAgendaDateLabel, formatEventDateRange } from './CalendarTheme';
 import { CalendarEventCard } from './CalendarEventCard';
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   events: CalendarEvent[];
@@ -15,17 +16,17 @@ interface Props {
 }
 
 const FILTER_TABS: Array<{
-  label: string;
+  labelKey: string;
   type: CalendarEventType | 'ALL';
   icon: keyof typeof Ionicons.glyphMap;
 }> = [
-  { label: 'All', type: 'ALL', icon: 'apps-outline' },
-  { label: 'Holidays', type: 'HOLIDAY', icon: 'sunny-outline' },
-  { label: 'Exams', type: 'EXAM', icon: 'school-outline' },
-  { label: 'Fees', type: 'FEE_DUE', icon: 'cash-outline' },
-  { label: 'Homework', type: 'HOMEWORK', icon: 'book-outline' },
-  { label: 'Events', type: 'SCHOOL_EVENT', icon: 'sparkles-outline' },
-  { label: 'Sports', type: 'SPORTS', icon: 'football-outline' },
+  { labelKey: 'all', type: 'ALL', icon: 'apps-outline' },
+  { labelKey: 'holidays', type: 'HOLIDAY', icon: 'sunny-outline' },
+  { labelKey: 'exams', type: 'EXAM', icon: 'school-outline' },
+  { labelKey: 'fees', type: 'FEE_DUE', icon: 'cash-outline' },
+  { labelKey: 'homework', type: 'HOMEWORK', icon: 'book-outline' },
+  { labelKey: 'events', type: 'SCHOOL_EVENT', icon: 'sparkles-outline' },
+  { labelKey: 'sports', type: 'SPORTS', icon: 'football-outline' },
 ];
 
 export const CalendarAgendaList: React.FC<Props> = ({
@@ -35,6 +36,8 @@ export const CalendarAgendaList: React.FC<Props> = ({
   onFilterTypeChange,
 }) => {
   const { theme, isDark } = useTheme();
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language?.startsWith('te') ? 'te-IN' : 'en-IN';
   const styles = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -85,7 +88,7 @@ export const CalendarAgendaList: React.FC<Props> = ({
         />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search holidays, exams, events…"
+          placeholder={t('studentCalendar.searchPlaceholder')}
           placeholderTextColor={isDark ? '#64748B' : '#94A3B8'}
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -114,7 +117,9 @@ export const CalendarAgendaList: React.FC<Props> = ({
               activeOpacity={0.7}
             >
               <Ionicons name={item.icon} size={13} color={isActive ? '#FFFFFF' : isDark ? '#94A3B8' : '#64748B'} />
-              <Text style={[styles.filterText, isActive && styles.activeFilterText]}>{item.label}</Text>
+              <Text style={[styles.filterText, isActive && styles.activeFilterText]}>
+                {t(`studentCalendar.${item.labelKey}`)}
+              </Text>
             </TouchableOpacity>
           );
         })}
@@ -125,15 +130,22 @@ export const CalendarAgendaList: React.FC<Props> = ({
           <View style={styles.emptyIcon}>
             <Ionicons name="search-outline" size={26} color={isDark ? '#A5B4FC' : '#4F46E5'} />
           </View>
-          <Text style={styles.emptyTitle}>No matching events</Text>
-          <Text style={styles.emptySub}>Try another filter or a shorter search.</Text>
+          <Text style={styles.emptyTitle}>{t('studentCalendar.noMatching')}</Text>
+          <Text style={styles.emptySub}>{t('studentCalendar.tryAnother')}</Text>
         </View>
       ) : (
         <View style={styles.listContainer}>
           {grouped.map(([ymd, dayEvents]) => (
             <View key={ymd} style={styles.group}>
               <View style={styles.groupHeader}>
-                <Text style={styles.groupTitle}>{formatAgendaDateLabel(ymd)}</Text>
+                <Text style={styles.groupTitle}>
+                  {(() => {
+                    const { relativeKey, dateLabel } = formatAgendaDateLabel(ymd, locale);
+                    return relativeKey
+                      ? `${t(`studentCalendar.${relativeKey}`)} · ${dateLabel}`
+                      : dateLabel;
+                  })()}
+                </Text>
                 <Text style={styles.groupCount}>{dayEvents.length}</Text>
               </View>
               {dayEvents.map((ev) => (
@@ -147,6 +159,7 @@ export const CalendarAgendaList: React.FC<Props> = ({
                     ev.all_day ?? ev.is_all_day,
                     ev.start_time,
                     ev.end_time,
+                    locale,
                   )}
                 />
               ))}

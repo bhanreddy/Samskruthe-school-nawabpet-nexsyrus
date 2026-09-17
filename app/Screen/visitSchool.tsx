@@ -21,6 +21,8 @@ import { useTheme } from '@/src/hooks/useTheme';
 import { visitorService, type VisitorRequest } from '@/src/services/visitorService';
 import { alertCompat } from '@/src/utils/crossPlatformAlert';
 import AppDatePicker, { parseYMD, toYMD } from '@/src/components/AppDatePicker';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 
 type DeptId = 'Teacher' | 'Principal' | 'Accounts' | 'Management' | 'Office' | 'Transport' | 'Hostel';
 
@@ -106,9 +108,9 @@ function firstOpenSlot(dateYmd: string) {
   return TIME_SLOTS.find((s) => !isSlotPast(dateYmd, s.start)) ?? TIME_SLOTS[0];
 }
 
-function formatVisitDate(ymd: string) {
+function formatVisitDate(ymd: string, locale = 'en-IN') {
   try {
-    return parseYMD(ymd).toLocaleDateString(undefined, {
+    return parseYMD(ymd).toLocaleDateString(locale, {
       weekday: 'short',
       day: 'numeric',
       month: 'short',
@@ -132,14 +134,19 @@ function digitsOnly(value: string) {
   return value.replace(/\D/g, '').slice(0, 10);
 }
 
-function deptLabel(id?: string) {
-  return DEPARTMENTS.find((d) => d.id === id)?.label || id || 'School meeting';
+function deptLabel(id: string | undefined, translate: TFunction) {
+  if (id && DEPARTMENTS.some((d) => d.id === id)) {
+    return translate(`studentVisitSchool.dept.${id}`);
+  }
+  return id || translate('studentVisitSchool.schoolMeeting');
 }
 
 export default function VisitSchoolScreen() {
   const router = useRouter();
   const { user, portalContexts } = useAuth();
   const { isDark } = useTheme();
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language?.startsWith('te') ? 'te-IN' : 'en-IN';
 
   const [activeTab, setActiveTab] = useState<'book' | 'my_visits'>('book');
   const [loading, setLoading] = useState(false);
@@ -236,7 +243,7 @@ export default function VisitSchoolScreen() {
       return;
     }
     if (hoursClosed) {
-      alertCompat('Visiting hours over', 'Please pick another date — today’s campus visiting slots have ended.');
+      alertCompat(t('studentVisitSchool.hoursOverTitle'), t('studentVisitSchool.hoursOverBody'));
       return;
     }
 
@@ -260,22 +267,22 @@ export default function VisitSchoolScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
       if (res.qrToken && res.request?.id) {
-        alertCompat('Pass issued', 'Your campus visit is approved. A secure QR pass is ready at the gate.', [
+        alertCompat(t('studentVisitSchool.passIssuedTitle'), t('studentVisitSchool.passIssuedBody'), [
           {
-            text: 'View pass',
+            text: t('studentVisitSchool.viewPass'),
             onPress: () =>
               router.push({
                 pathname: '/Screen/visitorPass',
                 params: { requestId: res.request.id, token: res.qrToken },
               } as any),
           },
-          { text: 'Later', style: 'cancel', onPress: () => setActiveTab('my_visits') },
+          { text: t('studentVisitSchool.later'), style: 'cancel', onPress: () => setActiveTab('my_visits') },
         ]);
       } else {
         alertCompat(
-          'Request sent',
-          'The school will review your visit. You will be notified once a pass is issued.',
-          [{ text: 'OK', onPress: () => setActiveTab('my_visits') }]
+          t('studentVisitSchool.requestSentTitle'),
+          t('studentVisitSchool.requestSentBody'),
+          [{ text: t('studentVisitSchool.ok'), onPress: () => setActiveTab('my_visits') }]
         );
       }
 
@@ -284,24 +291,24 @@ export default function VisitSchoolScreen() {
       setAttempted(false);
       loadMyVisits(true);
     } catch (err: any) {
-      alertCompat('Booking failed', err?.message || 'Could not submit visit request');
+      alertCompat(t('studentVisitSchool.bookingFailed'), err?.message || t('studentVisitSchool.bookingFailedBody'));
     } finally {
       setLoading(false);
     }
   };
 
   const confirmCancel = (visit: VisitorRequest) => {
-    alertCompat('Cancel this visit?', 'The pass will no longer be valid at the gate.', [
-      { text: 'Keep visit', style: 'cancel' },
+    alertCompat(t('studentVisitSchool.cancelTitle'), t('studentVisitSchool.cancelBody'), [
+      { text: t('studentVisitSchool.keepVisit'), style: 'cancel' },
       {
-        text: 'Cancel visit',
+        text: t('studentVisitSchool.cancelVisit'),
         style: 'destructive',
         onPress: async () => {
           try {
             await visitorService.cancelVisitorRequest(visit.id, 'Cancelled by parent');
             loadMyVisits(true);
           } catch (e: any) {
-            alertCompat('Cancel failed', e?.message || 'Could not cancel visit');
+            alertCompat(t('studentVisitSchool.cancelFailed'), e?.message || t('studentVisitSchool.cancelFailed'));
           }
         },
       },
@@ -315,7 +322,7 @@ export default function VisitSchoolScreen() {
       return;
     }
     if (visit.approval_status === 'PENDING') {
-      alertCompat('Awaiting approval', 'The school office is reviewing this request. You will get a QR pass once it is approved.');
+      alertCompat(t('studentVisitSchool.awaitingTitle'), t('studentVisitSchool.awaitingBody'));
     }
   };
 
@@ -334,19 +341,19 @@ export default function VisitSchoolScreen() {
         <TouchableOpacity
           onPress={() => router.back()}
           style={[styles.iconBtn, { backgroundColor: palette.card, borderColor: palette.border }]}
-          accessibilityLabel="Go back"
+          accessibilityLabel={t('goBack')}
           activeOpacity={0.8}
         >
           <Ionicons name="chevron-back" size={22} color={palette.text} />
         </TouchableOpacity>
         <View style={styles.headerTitleBlock}>
-          <Text style={[styles.headerTitle, { color: palette.text }]}>Visit School</Text>
-          <Text style={[styles.headerSub, { color: palette.sub }]}>Campus access pass</Text>
+          <Text style={[styles.headerTitle, { color: palette.text }]}>{t('studentVisitSchool.title')}</Text>
+          <Text style={[styles.headerSub, { color: palette.sub }]}>{t('studentVisitSchool.subtitle')}</Text>
         </View>
         <TouchableOpacity
           onPress={() => loadMyVisits()}
           style={[styles.iconBtn, { backgroundColor: palette.card, borderColor: palette.border }]}
-          accessibilityLabel="Refresh visits"
+          accessibilityLabel={t('studentVisitSchool.refreshVisits')}
           activeOpacity={0.8}
         >
           {fetching ? (
@@ -367,10 +374,10 @@ export default function VisitSchoolScreen() {
           activeOpacity={0.85}
           accessibilityRole="tab"
           accessibilityState={{ selected: activeTab === 'book' }}
-          accessibilityLabel="Book visit"
+          accessibilityLabel={t('studentVisitSchool.bookVisit')}
         >
           <Ionicons name="calendar-outline" size={15} color={activeTab === 'book' ? ACCENT : palette.sub} />
-          <Text style={[styles.tabText, { color: activeTab === 'book' ? palette.text : palette.sub }]}>Book visit</Text>
+          <Text style={[styles.tabText, { color: activeTab === 'book' ? palette.text : palette.sub }]}>{t('studentVisitSchool.bookVisit')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[
@@ -384,10 +391,10 @@ export default function VisitSchoolScreen() {
           activeOpacity={0.85}
           accessibilityRole="tab"
           accessibilityState={{ selected: activeTab === 'my_visits' }}
-          accessibilityLabel="My passes"
+          accessibilityLabel={t('studentVisitSchool.myPasses')}
         >
           <Ionicons name="qr-code-outline" size={15} color={activeTab === 'my_visits' ? ACCENT : palette.sub} />
-          <Text style={[styles.tabText, { color: activeTab === 'my_visits' ? palette.text : palette.sub }]}>My passes</Text>
+          <Text style={[styles.tabText, { color: activeTab === 'my_visits' ? palette.text : palette.sub }]}>{t('studentVisitSchool.myPasses')}</Text>
           {myVisits.length > 0 ? (
             <View style={styles.tabCount}>
               <Text style={styles.tabCountText}>{myVisits.length}</Text>
@@ -420,9 +427,9 @@ export default function VisitSchoolScreen() {
                     <Ionicons name="shield-checkmark" size={22} color="#FFFFFF" />
                   </View>
                   <View style={styles.flex1}>
-                    <Text style={styles.heroTitle}>Walk in with a QR pass</Text>
+                    <Text style={styles.heroTitle}>{t('studentVisitSchool.heroTitle')}</Text>
                     <Text style={styles.heroSub}>
-                      Choose who to meet, pick a slot, and show your pass at the gate.
+                      {t('studentVisitSchool.heroSub')}
                     </Text>
                   </View>
                 </View>
@@ -430,13 +437,13 @@ export default function VisitSchoolScreen() {
                   <View style={styles.heroStudent}>
                     <Ionicons name="person-circle-outline" size={16} color="#ECFDF5" />
                     <Text style={styles.heroStudentText} numberOfLines={1}>
-                      Visiting for {studentLabel}
+                      {t('studentVisitSchool.visitingFor', { name: studentLabel })}
                       {studentSub ? ` · ${studentSub}` : ''}
                     </Text>
                   </View>
                 ) : null}
                 <View style={styles.heroSteps}>
-                  {['Meet', 'Schedule', 'QR pass'].map((step, i) => (
+                  {[t('studentVisitSchool.stepMeet'), t('studentVisitSchool.stepSchedule'), t('studentVisitSchool.stepPass')].map((step, i) => (
                     <View key={step} style={styles.heroStep}>
                       <View style={styles.heroStepNum}>
                         <Text style={styles.heroStepNumText}>{i + 1}</Text>
@@ -448,7 +455,7 @@ export default function VisitSchoolScreen() {
                 </View>
               </LinearGradient>
 
-              <Text style={[styles.sectionLabel, { color: palette.text }]}>Who do you want to meet?</Text>
+              <Text style={[styles.sectionLabel, { color: palette.text }]}>{t('studentVisitSchool.whoMeet')}</Text>
               <View style={styles.deptGrid}>
                 {DEPARTMENTS.map((dept) => {
                   const selected = department === dept.id;
@@ -478,8 +485,12 @@ export default function VisitSchoolScreen() {
                       <View style={[styles.deptIcon, { backgroundColor: `${dept.tint}18` }]}>
                         <Ionicons name={dept.icon} size={20} color={dept.tint} />
                       </View>
-                      <Text style={[styles.deptLabel, { color: palette.text }]}>{dept.label}</Text>
-                      <Text style={[styles.deptHint, { color: palette.sub }]}>{dept.hint}</Text>
+                      <Text style={[styles.deptLabel, { color: palette.text }]}>
+                        {t(`studentVisitSchool.dept.${dept.id}`, dept.label)}
+                      </Text>
+                      <Text style={[styles.deptHint, { color: palette.sub }]}>
+                        {t(`studentVisitSchool.deptHint.${dept.id}`, dept.hint)}
+                      </Text>
                     </TouchableOpacity>
                   );
                 })}
@@ -490,11 +501,11 @@ export default function VisitSchoolScreen() {
                   <View style={[styles.cardHeadIcon, { backgroundColor: 'rgba(5,150,105,0.12)' }]}>
                     <Ionicons name="person-outline" size={16} color={ACCENT} />
                   </View>
-                  <Text style={[styles.cardTitle, { color: palette.text }]}>Visitor details</Text>
+                  <Text style={[styles.cardTitle, { color: palette.text }]}>{t('studentVisitSchool.visitorDetails')}</Text>
                 </View>
 
                 <Text style={[styles.fieldLabel, { color: palette.sub }]}>
-                  Full name <Text style={styles.req}>*</Text>
+                  {t('studentVisitSchool.fullName')} <Text style={styles.req}>*</Text>
                 </Text>
                 <View style={inputWrap('name', nameError)}>
                   <Ionicons name="person-circle-outline" size={18} color={nameError ? palette.danger : palette.muted} />
@@ -502,32 +513,32 @@ export default function VisitSchoolScreen() {
                     style={[styles.input, { color: palette.text }]}
                     value={visitorName}
                     onChangeText={setVisitorName}
-                    placeholder="Visitor full name"
+                    placeholder={t('studentVisitSchool.fullNamePlaceholder')}
                     placeholderTextColor={palette.muted}
                     autoCapitalize="words"
                     onFocus={() => setFocusedField('name')}
                     onBlur={() => setFocusedField(null)}
-                    accessibilityLabel="Visitor full name"
+                    accessibilityLabel={t('studentVisitSchool.fullName')}
                   />
                 </View>
-                {nameError ? <Text style={styles.errorText}>Enter the visitor’s full name.</Text> : null}
+                {nameError ? <Text style={styles.errorText}>{t('studentVisitSchool.nameRequired')}</Text> : null}
 
                 <Text style={[styles.fieldLabel, { color: palette.sub }]}>
-                  Mobile number <Text style={styles.req}>*</Text>
+                  {t('studentVisitSchool.mobile')} <Text style={styles.req}>*</Text>
                 </Text>
                 <View style={inputWrap('mobile', mobileError)}>
                   <Ionicons name="call-outline" size={18} color={mobileError ? palette.danger : palette.muted} />
                   <TextInput
                     style={[styles.input, { color: palette.text }]}
                     value={mobileNumber}
-                    onChangeText={(t) => setMobileNumber(digitsOnly(t))}
+                    onChangeText={(value) => setMobileNumber(digitsOnly(value))}
                     keyboardType="phone-pad"
                     maxLength={10}
-                    placeholder="10-digit mobile number"
+                    placeholder={t('studentVisitSchool.mobilePlaceholder')}
                     placeholderTextColor={palette.muted}
                     onFocus={() => setFocusedField('mobile')}
                     onBlur={() => setFocusedField(null)}
-                    accessibilityLabel="Mobile number"
+                    accessibilityLabel={t('studentVisitSchool.mobile')}
                   />
                   {mobileNumber.length === 10 ? (
                     <Ionicons name="checkmark-circle" size={18} color={ACCENT} />
@@ -535,9 +546,9 @@ export default function VisitSchoolScreen() {
                     <Text style={[styles.charHint, { color: palette.muted }]}>{mobileNumber.length}/10</Text>
                   )}
                 </View>
-                {mobileError ? <Text style={styles.errorText}>Enter a valid 10-digit mobile number.</Text> : null}
+                {mobileError ? <Text style={styles.errorText}>{t('studentVisitSchool.mobileRequired')}</Text> : null}
 
-                <Text style={[styles.fieldLabel, { color: palette.sub }]}>Relationship</Text>
+                <Text style={[styles.fieldLabel, { color: palette.sub }]}>{t('studentVisitSchool.relationship')}</Text>
                 <View style={styles.chipWrap}>
                   {RELATIONSHIPS.map((rel) => {
                     const selected = relationship === rel;
@@ -557,7 +568,9 @@ export default function VisitSchoolScreen() {
                         }}
                         activeOpacity={0.85}
                       >
-                        <Text style={[styles.chipText, { color: selected ? '#FFFFFF' : palette.text }]}>{rel}</Text>
+                        <Text style={[styles.chipText, { color: selected ? '#FFFFFF' : palette.text }]}>
+                          {t(`studentVisitSchool.rel.${rel}`, rel)}
+                        </Text>
                       </TouchableOpacity>
                     );
                   })}
@@ -568,7 +581,7 @@ export default function VisitSchoolScreen() {
                       style={[styles.input, { color: palette.text }]}
                       value={customRelationship}
                       onChangeText={setCustomRelationship}
-                      placeholder="e.g. Uncle, Family friend"
+                      placeholder={t('studentVisitSchool.otherRelationshipPlaceholder')}
                       placeholderTextColor={palette.muted}
                       onFocus={() => setFocusedField('rel')}
                       onBlur={() => setFocusedField(null)}
@@ -578,8 +591,8 @@ export default function VisitSchoolScreen() {
 
                 <View style={styles.stepperRow}>
                   <View style={styles.flex1}>
-                    <Text style={[styles.fieldLabel, { color: palette.sub, marginTop: 0 }]}>Total visitors</Text>
-                    <Text style={[styles.stepperHint, { color: palette.muted }]}>Including you</Text>
+                    <Text style={[styles.fieldLabel, { color: palette.sub, marginTop: 0 }]}>{t('studentVisitSchool.totalVisitors')}</Text>
+                    <Text style={[styles.stepperHint, { color: palette.muted }]}>{t('studentVisitSchool.includingYou')}</Text>
                   </View>
                   <View style={[styles.stepper, { backgroundColor: palette.raised, borderColor: palette.border }]}>
                     <TouchableOpacity
@@ -589,7 +602,7 @@ export default function VisitSchoolScreen() {
                         Haptics.selectionAsync();
                         setVisitorCount((n) => Math.max(1, n - 1));
                       }}
-                      accessibilityLabel="Decrease visitors"
+                      accessibilityLabel={t('studentVisitSchool.decreaseVisitors')}
                     >
                       <Ionicons name="remove" size={18} color={visitorCount <= 1 ? palette.muted : palette.text} />
                     </TouchableOpacity>
@@ -601,7 +614,7 @@ export default function VisitSchoolScreen() {
                         Haptics.selectionAsync();
                         setVisitorCount((n) => Math.min(MAX_VISITORS, n + 1));
                       }}
-                      accessibilityLabel="Increase visitors"
+                      accessibilityLabel={t('studentVisitSchool.increaseVisitors')}
                     >
                       <Ionicons name="add" size={18} color={visitorCount >= MAX_VISITORS ? palette.muted : palette.text} />
                     </TouchableOpacity>
@@ -614,13 +627,13 @@ export default function VisitSchoolScreen() {
                   <View style={[styles.cardHeadIcon, { backgroundColor: 'rgba(79,70,229,0.12)' }]}>
                     <Ionicons name="time-outline" size={16} color="#4F46E5" />
                   </View>
-                  <Text style={[styles.cardTitle, { color: palette.text }]}>When are you coming?</Text>
+                  <Text style={[styles.cardTitle, { color: palette.text }]}>{t('studentVisitSchool.whenComing')}</Text>
                 </View>
 
                 <AppDatePicker
                   value={visitDate}
                   onChange={handleDateChange}
-                  label="Visit date"
+                  label={t('studentVisitSchool.visitDate')}
                   required
                   minimumDate={new Date()}
                   maximumDate={MAX_DATE}
@@ -631,12 +644,12 @@ export default function VisitSchoolScreen() {
                   containerStyle={{ marginBottom: 8 }}
                 />
 
-                <Text style={[styles.fieldLabel, { color: palette.sub }]}>Preferred time slot</Text>
+                <Text style={[styles.fieldLabel, { color: palette.sub }]}>{t('studentVisitSchool.preferredSlot')}</Text>
                 {hoursClosed ? (
                   <View style={styles.closedNote}>
                     <Ionicons name="moon-outline" size={16} color="#D97706" />
                     <Text style={styles.closedNoteText}>
-                      Visiting hours for this date have ended. Please choose another day.
+                      {t('studentVisitSchool.hoursEnded')}
                     </Text>
                   </View>
                 ) : (
@@ -672,19 +685,19 @@ export default function VisitSchoolScreen() {
                   </View>
                 )}
 
-                <Text style={[styles.fieldLabel, { color: palette.sub }]}>Vehicle number · optional</Text>
+                <Text style={[styles.fieldLabel, { color: palette.sub }]}>{t('studentVisitSchool.vehicleOptional')}</Text>
                 <View style={inputWrap('vehicle')}>
                   <Ionicons name="car-outline" size={18} color={palette.muted} />
                   <TextInput
                     style={[styles.input, { color: palette.text }]}
                     value={vehicleNumber}
-                    onChangeText={(t) => setVehicleNumber(t.toUpperCase())}
+                    onChangeText={(value) => setVehicleNumber(value.toUpperCase())}
                     autoCapitalize="characters"
-                    placeholder="e.g. AP 28 AB 1234"
+                    placeholder={t('studentVisitSchool.vehiclePlaceholder')}
                     placeholderTextColor={palette.muted}
                     onFocus={() => setFocusedField('vehicle')}
                     onBlur={() => setFocusedField(null)}
-                    accessibilityLabel="Vehicle number"
+                    accessibilityLabel={t('studentVisitSchool.vehicleOptional')}
                   />
                 </View>
               </View>
@@ -694,7 +707,7 @@ export default function VisitSchoolScreen() {
                   <View style={[styles.cardHeadIcon, { backgroundColor: 'rgba(217,119,6,0.12)' }]}>
                     <Ionicons name="chatbubble-ellipses-outline" size={16} color="#D97706" />
                   </View>
-                  <Text style={[styles.cardTitle, { color: palette.text }]}>Purpose of visit</Text>
+                  <Text style={[styles.cardTitle, { color: palette.text }]}>{t('studentVisitSchool.purposeTitle')}</Text>
                 </View>
 
                 <View style={styles.chipWrap}>
@@ -713,19 +726,21 @@ export default function VisitSchoolScreen() {
                         onPress={() => {
                           Haptics.selectionAsync();
                           setPurposeChip(chip.id);
-                          if (chip.text) setPurpose(chip.text);
+                          if (chip.text) setPurpose(t(`studentVisitSchool.purposeText.${chip.id}`, chip.text));
                           if (chip.id === 'other') setPurpose('');
                         }}
                         activeOpacity={0.85}
                       >
-                        <Text style={[styles.chipText, { color: selected ? '#FFFFFF' : palette.text }]}>{chip.label}</Text>
+                        <Text style={[styles.chipText, { color: selected ? '#FFFFFF' : palette.text }]}>
+                          {t(`studentVisitSchool.purpose.${chip.id}`, chip.label)}
+                        </Text>
                       </TouchableOpacity>
                     );
                   })}
                 </View>
 
                 <Text style={[styles.fieldLabel, { color: palette.sub }]}>
-                  Brief note for the gate & host <Text style={styles.req}>*</Text>
+                  {t('studentVisitSchool.purposeLabel')} <Text style={styles.req}>*</Text>
                 </Text>
                 <View
                   style={[
@@ -739,26 +754,29 @@ export default function VisitSchoolScreen() {
                   <TextInput
                     style={[styles.textArea, { color: palette.text }]}
                     value={purpose}
-                    onChangeText={(t) => {
-                      setPurpose(t);
-                      const match = PURPOSE_CHIPS.find((c) => c.text && c.text === t);
-                      setPurposeChip(match ? match.id : t.trim() ? 'other' : null);
+                    onChangeText={(value) => {
+                      setPurpose(value);
+                      const match = PURPOSE_CHIPS.find((c) => {
+                        if (!c.text) return false;
+                        return c.text === value || t(`studentVisitSchool.purposeText.${c.id}`) === value;
+                      });
+                      setPurposeChip(match ? match.id : value.trim() ? 'other' : null);
                     }}
                     multiline
                     numberOfLines={3}
                     maxLength={240}
-                    placeholder="e.g. Discuss mid-term progress with the class teacher"
+                    placeholder={t('studentVisitSchool.purposePlaceholder')}
                     placeholderTextColor={palette.muted}
                     onFocus={() => setFocusedField('purpose')}
                     onBlur={() => setFocusedField(null)}
-                    accessibilityLabel="Purpose of visit"
+                    accessibilityLabel={t('studentVisitSchool.purposeTitle')}
                   />
                 </View>
                 <View style={styles.purposeMeta}>
                   {purposeError ? (
-                    <Text style={styles.errorText}>A short reason helps the school approve faster.</Text>
+                    <Text style={styles.errorText}>{t('studentVisitSchool.purposeRequired')}</Text>
                   ) : (
-                    <Text style={[styles.helper, { color: palette.muted }]}>Shown to gate security and the host.</Text>
+                    <Text style={[styles.helper, { color: palette.muted }]}>{t('studentVisitSchool.purposeHelper')}</Text>
                   )}
                   <Text style={[styles.helper, { color: palette.muted }]}>{purpose.length}/240</Text>
                 </View>
@@ -767,16 +785,16 @@ export default function VisitSchoolScreen() {
               <View style={[styles.trustRow, { backgroundColor: palette.card, borderColor: palette.border }]}>
                 <Ionicons name="lock-closed-outline" size={16} color={ACCENT} />
                 <Text style={[styles.trustText, { color: palette.sub }]}>
-                  Carry a photo ID. Check in and out at the visitor gate with your QR pass.
+                  {t('studentVisitSchool.trust')}
                 </Text>
               </View>
             </ScrollView>
 
             <View style={[styles.footer, { backgroundColor: palette.bg, borderTopColor: palette.border }]}>
               <View style={styles.footerSummary}>
-                <Text style={[styles.footerEyebrow, { color: palette.muted }]}>Your visit</Text>
+                <Text style={[styles.footerEyebrow, { color: palette.muted }]}>{t('studentVisitSchool.yourVisit')}</Text>
                 <Text style={[styles.footerLine, { color: palette.text }]} numberOfLines={1}>
-                  {selectedDept.label} · {formatVisitDate(visitDate)} · {formatTime(startTime)}–{formatTime(endTime)}
+                  {t(`studentVisitSchool.dept.${selectedDept.id}`, selectedDept.label)} · {formatVisitDate(visitDate, locale)} · {formatTime(startTime)}–{formatTime(endTime)}
                 </Text>
               </View>
               <TouchableOpacity
@@ -784,7 +802,7 @@ export default function VisitSchoolScreen() {
                 onPress={handleSubmit}
                 disabled={loading}
                 activeOpacity={0.9}
-                accessibilityLabel="Request campus access pass"
+                accessibilityLabel={t('studentVisitSchool.requestPass')}
               >
                 <LinearGradient colors={['#10B981', '#047857']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.submitGradient}>
                   {loading ? (
@@ -792,7 +810,7 @@ export default function VisitSchoolScreen() {
                   ) : (
                     <>
                       <Ionicons name="qr-code-outline" size={20} color="#FFFFFF" />
-                      <Text style={styles.submitText}>Request access pass</Text>
+                      <Text style={styles.submitText}>{t('studentVisitSchool.requestPass')}</Text>
                     </>
                   )}
                 </LinearGradient>
@@ -815,12 +833,12 @@ export default function VisitSchoolScreen() {
                 <View style={styles.emptyIcon}>
                   <Ionicons name="ticket-outline" size={32} color={ACCENT} />
                 </View>
-                <Text style={[styles.emptyTitle, { color: palette.text }]}>No passes yet</Text>
+                <Text style={[styles.emptyTitle, { color: palette.text }]}>{t('studentVisitSchool.emptyTitle')}</Text>
                 <Text style={[styles.emptySub, { color: palette.sub }]}>
-                  Book a campus visit and your QR pass will appear here for the gate.
+                  {t('studentVisitSchool.emptySub')}
                 </Text>
                 <TouchableOpacity style={styles.emptyCta} onPress={() => setActiveTab('book')} activeOpacity={0.85}>
-                  <Text style={styles.emptyCtaText}>Book a visit</Text>
+                  <Text style={styles.emptyCtaText}>{t('studentVisitSchool.emptyCta')}</Text>
                 </TouchableOpacity>
               </View>
             ) : (
@@ -840,13 +858,15 @@ export default function VisitSchoolScreen() {
                         <Ionicons name={meta.icon} size={18} color={meta.color} />
                       </View>
                       <View style={styles.flex1}>
-                        <Text style={[styles.passTitle, { color: palette.text }]}>{deptLabel(v.destination_department)}</Text>
+                        <Text style={[styles.passTitle, { color: palette.text }]}>{deptLabel(v.destination_department, t)}</Text>
                         <Text style={[styles.passDate, { color: palette.sub }]}>
-                          {formatVisitDate(v.visit_date)} · {formatTime(v.start_time)} – {formatTime(v.end_time)}
+                          {formatVisitDate(v.visit_date, locale)} · {formatTime(v.start_time)} – {formatTime(v.end_time)}
                         </Text>
                       </View>
                       <View style={[styles.statusBadge, { backgroundColor: meta.bg }]}>
-                        <Text style={[styles.statusText, { color: meta.color }]}>{meta.label}</Text>
+                        <Text style={[styles.statusText, { color: meta.color }]}>
+                          {t(`studentVisitSchool.status.${v.approval_status}`, meta.label)}
+                        </Text>
                       </View>
                     </View>
 
@@ -864,17 +884,17 @@ export default function VisitSchoolScreen() {
                         </View>
                       ) : (
                         <Text style={[styles.passFooterHint, { color: palette.muted }]}>
-                          {isApproved ? 'Tap to open pass' : 'Pass pending'}
+                          {isApproved ? t('studentVisitSchool.tapToOpen') : t('studentVisitSchool.passPending')}
                         </Text>
                       )}
                       {isApproved ? (
                         <View style={styles.viewPassHint}>
-                          <Text style={styles.tapToView}>Open QR pass</Text>
+                          <Text style={styles.tapToView}>{t('studentVisitSchool.openQr')}</Text>
                           <Ionicons name="chevron-forward" size={14} color={ACCENT} />
                         </View>
                       ) : canCancel ? (
                         <TouchableOpacity onPress={() => confirmCancel(v)} hitSlop={8}>
-                          <Text style={styles.cancelLink}>Cancel</Text>
+                          <Text style={styles.cancelLink}>{t('studentVisitSchool.cancel')}</Text>
                         </TouchableOpacity>
                       ) : null}
                     </View>

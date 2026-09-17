@@ -1,3 +1,5 @@
+import { summarizeStudentMarks } from './marksTotals';
+
 export type ProgressReportType = 'direct' | 'component';
 export type ProgressReportLayout = 'ultra-premium' | 'normal';
 
@@ -75,42 +77,44 @@ const reportSubjects = (
     : subject.assessmentSchema === 'consolidated',
 );
 
+/** The maximum and score a report card shows for a subject in this report type. */
+const reportSubjectScore = (
+  subject: ProgressReportSubject,
+  reportType: ProgressReportType,
+) => reportType === 'direct'
+  ? {
+    maxMarks: subject.consolidatedMaxMarks || subject.maxMarks,
+    obtained: subject.consolidatedMarksObtained ?? subject.obtained,
+  }
+  : { maxMarks: subject.maxMarks, obtained: subject.obtained };
+
 export function progressReportSummary(
   student: ProgressReportStudent,
   reportType: ProgressReportType,
 ) {
   const subjects = reportSubjects(student, reportType);
-  let totalObtained = 0;
-  let totalMax = 0;
-  let completed = 0;
-  let failed = false;
+  const totals = summarizeStudentMarks(subjects.map((subject) => ({
+    ...reportSubjectScore(subject, reportType),
+    hasMarks: subject.hasMarks,
+    isAbsent: subject.isAbsent,
+  })));
 
-  subjects.forEach((subject) => {
-    const maximum = reportType === 'direct'
-      ? subject.consolidatedMaxMarks || subject.maxMarks
-      : subject.maxMarks;
-    const obtained = reportType === 'direct'
-      ? subject.consolidatedMarksObtained ?? subject.obtained
-      : subject.obtained;
-    totalMax += maximum;
-    if (!subject.hasMarks) return;
-    completed += 1;
-    if (!subject.isAbsent && obtained != null) totalObtained += Number(obtained);
-    if (
-      subject.isAbsent ||
-      (obtained != null && Number(obtained) < (subject.passingMarks || maximum * 0.35))
-    ) failed = true;
+  const failed = subjects.some((subject) => {
+    if (!subject.hasMarks) return false;
+    if (subject.isAbsent) return true;
+    const { maxMarks, obtained } = reportSubjectScore(subject, reportType);
+    return obtained != null && Number(obtained) < (subject.passingMarks || maxMarks * 0.35);
   });
 
-  const percentage = totalMax > 0 ? (totalObtained / totalMax) * 100 : 0;
-  const pending = subjects.length - completed;
   return {
     subjects,
-    totalObtained,
-    totalMax,
-    percentage,
-    pending,
-    result: subjects.length === 0 || pending > 0 ? 'PENDING' : failed ? 'NEEDS SUPPORT' : 'PROMOTED',
+    totalObtained: totals.totalObtained ?? 0,
+    totalMax: totals.totalMax,
+    percentage: totals.percentage ?? 0,
+    pending: totals.missingSubjects + totals.unassessableSubjects,
+    result: totals.subjectCount === 0 || !totals.isComplete
+      ? 'PENDING'
+      : failed ? 'NEEDS SUPPORT' : 'PROMOTED',
   };
 }
 

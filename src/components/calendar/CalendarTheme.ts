@@ -310,14 +310,14 @@ export function addDaysYmd(ymd: string, days: number): string {
   return toLocalYmd(next);
 }
 
-export function formatEventDateRange(startDate: string, endDate?: string, allDay = true, startTime?: string | null, endTime?: string | null): string {
+export function formatEventDateRange(startDate: string, endDate?: string, allDay = true, startTime?: string | null, endTime?: string | null, locale = 'en-IN'): string {
   if (!startDate) return '';
   const start = parseYmd(startDate);
-  const startStr = start.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  const startStr = start.toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' });
   
   if (endDate && endDate !== startDate) {
     const end = parseYmd(endDate);
-    const endStr = end.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    const endStr = end.toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' });
     return `${startStr} - ${endStr}`;
   }
 
@@ -355,30 +355,38 @@ export function shiftMonthKeepingDay(current: Date, deltaMonths: number, selecte
   };
 }
 
-export function formatDayParts(ymd: string): {
+export function formatDayParts(ymd: string, locale = 'en-IN'): {
   numeral: string;
   weekday: string;
   weekdayShort: string;
   monthYear: string;
   relative: string;
+  relativeKey: '' | 'today' | 'tomorrow' | 'yesterday';
 } {
   const d = parseYmd(ymd);
   const today = todayYmd();
-  const relative =
-    ymd === today ? 'Today' : ymd === addDaysYmd(today, 1) ? 'Tomorrow' : ymd === addDaysYmd(today, -1) ? 'Yesterday' : '';
+  const relativeKey: '' | 'today' | 'tomorrow' | 'yesterday' =
+    ymd === today ? 'today' : ymd === addDaysYmd(today, 1) ? 'tomorrow' : ymd === addDaysYmd(today, -1) ? 'yesterday' : '';
 
   return {
     numeral: String(d.getDate()),
-    weekday: d.toLocaleDateString('en-IN', { weekday: 'long' }),
-    weekdayShort: d.toLocaleDateString('en-IN', { weekday: 'short' }),
-    monthYear: d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' }),
-    relative,
+    weekday: d.toLocaleDateString(locale, { weekday: 'long' }),
+    weekdayShort: d.toLocaleDateString(locale, { weekday: 'short' }),
+    monthYear: d.toLocaleDateString(locale, { month: 'long', year: 'numeric' }),
+    relative: relativeKey ? relativeKey[0].toUpperCase() + relativeKey.slice(1) : '',
+    relativeKey,
   };
 }
 
-export function formatAgendaDateLabel(ymd: string): string {
-  const parts = formatDayParts(ymd);
+export function formatAgendaDateLabel(ymd: string, locale = 'en-IN'): {
+  relativeKey: '' | 'today' | 'tomorrow' | 'yesterday';
+  dateLabel: string;
+} {
+  const parts = formatDayParts(ymd, locale);
   const d = parseYmd(ymd);
-  const dateBit = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
-  return parts.relative ? `${parts.relative} · ${dateBit}` : `${parts.weekdayShort} · ${dateBit}`;
+  const dateBit = d.toLocaleDateString(locale, { day: 'numeric', month: 'short' });
+  return {
+    relativeKey: parts.relativeKey,
+    dateLabel: parts.relativeKey ? dateBit : `${parts.weekdayShort} · ${dateBit}`,
+  };
 }

@@ -10,6 +10,7 @@ import {
   formatEventTime,
   formatAudience,
 } from './CalendarTheme';
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   event: CalendarEvent;
@@ -19,15 +20,27 @@ interface Props {
 
 export const CalendarEventCard: React.FC<Props> = ({ event, onPress, trailing }) => {
   const { theme, isDark } = useTheme();
+  const { t } = useTranslation();
   const styles = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const typeConfig = getEventTypeConfig(event.event_type);
+  const typeLabel = t(`studentCalendar.eventType.${event.event_type || 'SCHOOL_EVENT'}`, typeConfig.label);
   const accent = event.color || typeConfig.color;
   const cancelled = event.status === 'CANCELLED';
+  const allDay = event.all_day ?? event.is_all_day ?? true;
   const timeText =
     trailing ||
-    formatEventTime(event.all_day ?? event.is_all_day ?? true, event.start_time, event.end_time);
+    (allDay
+      ? t('studentCalendar.allDay')
+      : !event.start_time
+        ? t('studentCalendar.scheduleTbd')
+        : formatEventTime(false, event.start_time, event.end_time));
   const priority = PRIORITY_CONFIG[event.priority] || PRIORITY_CONFIG.MEDIUM;
+  const priorityLabel = t(`studentCalendar.priority.${event.priority || 'MEDIUM'}`, priority.label);
   const showPriority = event.priority && event.priority !== 'MEDIUM' && event.priority !== 'NORMAL';
+  const audience =
+    !event.target_type || event.target_type === 'ENTIRE_SCHOOL'
+      ? t('studentCalendar.wholeSchool')
+      : formatAudience(event.target_type);
 
   return (
     <TouchableOpacity
@@ -35,7 +48,7 @@ export const CalendarEventCard: React.FC<Props> = ({ event, onPress, trailing })
       onPress={onPress}
       activeOpacity={0.78}
       accessibilityRole="button"
-      accessibilityLabel={`${event.title}, ${typeConfig.label}, ${timeText}`}
+      accessibilityLabel={`${event.title}, ${typeLabel}, ${timeText}`}
     >
       <View style={[styles.accent, { backgroundColor: accent }]} />
       <View
@@ -55,7 +68,7 @@ export const CalendarEventCard: React.FC<Props> = ({ event, onPress, trailing })
         </View>
         <Text style={styles.meta} numberOfLines={1}>
           {timeText}
-          {event.location ? `  ·  ${event.location}` : `  ·  ${formatAudience(event.target_type)}`}
+          {event.location ? `  ·  ${event.location}` : `  ·  ${audience}`}
         </Text>
         <View style={styles.chipRow}>
           <View
@@ -67,11 +80,11 @@ export const CalendarEventCard: React.FC<Props> = ({ event, onPress, trailing })
               },
             ]}
           >
-            <Text style={[styles.typeChipText, { color: typeConfig.color }]}>{typeConfig.label}</Text>
+            <Text style={[styles.typeChipText, { color: typeConfig.color }]}>{typeLabel}</Text>
           </View>
           {showPriority ? (
             <View style={[styles.priorityChip, { backgroundColor: priority.badge }]}>
-              <Text style={[styles.priorityChipText, { color: priority.color }]}>{priority.label}</Text>
+              <Text style={[styles.priorityChipText, { color: priority.color }]}>{priorityLabel}</Text>
             </View>
           ) : null}
           {event.timetable_day_override ? (

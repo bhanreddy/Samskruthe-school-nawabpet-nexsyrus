@@ -61,12 +61,18 @@ export interface ProgressCardAssistantReport {
   subjects: ProgressCardSubjectResult[];
   summary: {
     total_obtained: number;
+    /** Maximum of the subjects that were actually marked; drives the percentage. */
     total_max: number;
+    /** Maximum of every configured paper, marked or not. */
+    exam_total_max: number;
     percentage: number;
     rank: number | null;
     subject_count: number;
     completed_subjects: number;
     missing_subjects: number;
+    /** Papers with no positive maximum marks, excluded from the totals. */
+    unassessable_subjects: number;
+    is_complete: boolean;
     ranking_method: ResultRankingMethod;
   };
   attendance: {

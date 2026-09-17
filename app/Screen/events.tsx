@@ -19,6 +19,8 @@ import { clayCard } from '@/src/theme/clayStyles';
 import { getEventTypeConfig, formatEventDateRange } from '@/src/components/calendar/CalendarTheme';
 import * as Haptics from '@/src/utils/haptics';
 import LogoLoader from '@/src/components/LogoLoader';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 
 type Filter = 'upcoming' | 'all';
 
@@ -30,32 +32,42 @@ const LIVE_STATUSES = new Set([
   'ONGOING',
 ]);
 
-function statusMeta(status?: string) {
+function statusMeta(status: string | undefined, isDark: boolean, t: TFunction) {
   const value = (status || '').toUpperCase();
-  if (value === 'ONGOING') return { label: 'Happening now', color: '#059669', bg: '#ECFDF5' };
-  if (value === 'REGISTRATION_OPEN') return { label: 'Open to join', color: '#4F46E5', bg: '#EEF2FF' };
-  if (value === 'COMPLETED' || value === 'CLOSED') return { label: 'Completed', color: '#64748B', bg: '#F1F5F9' };
-  if (value === 'CANCELLED') return { label: 'Cancelled', color: '#DC2626', bg: '#FEF2F2' };
-  return { label: 'Upcoming', color: '#2563EB', bg: '#EFF6FF' };
+  if (value === 'ONGOING') {
+    return { label: t('studentEventDesk.happeningNow'), color: '#059669', bg: isDark ? 'rgba(5,150,105,0.22)' : '#ECFDF5' };
+  }
+  if (value === 'REGISTRATION_OPEN') {
+    return { label: t('studentEventDesk.openToJoin'), color: '#4F46E5', bg: isDark ? 'rgba(79,70,229,0.22)' : '#EEF2FF' };
+  }
+  if (value === 'COMPLETED' || value === 'CLOSED') {
+    return { label: t('studentEventDesk.completed'), color: isDark ? '#94A3B8' : '#64748B', bg: isDark ? 'rgba(148,163,184,0.16)' : '#F1F5F9' };
+  }
+  if (value === 'CANCELLED') {
+    return { label: t('studentEventDesk.cancelled'), color: '#DC2626', bg: isDark ? 'rgba(220,38,38,0.2)' : '#FEF2F2' };
+  }
+  return { label: t('studentEventDesk.upcomingStatus'), color: '#2563EB', bg: isDark ? 'rgba(37,99,235,0.22)' : '#EFF6FF' };
 }
 
-function countdown(startDate?: string) {
+function countdown(startDate: string | undefined, t: TFunction) {
   if (!startDate) return '';
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const eventDate = new Date(`${startDate}T00:00:00`);
   if (Number.isNaN(eventDate.getTime())) return '';
   const diff = Math.round((eventDate.getTime() - today.getTime()) / 86400000);
-  if (diff === 0) return 'Today';
-  if (diff === 1) return 'Tomorrow';
-  if (diff > 1 && diff <= 14) return `In ${diff} days`;
-  if (diff < 0 && diff >= -1) return 'Yesterday';
+  if (diff === 0) return t('studentEventDesk.today');
+  if (diff === 1) return t('studentEventDesk.tomorrow');
+  if (diff > 1 && diff <= 14) return t('studentEventDesk.inDays', { count: diff });
+  if (diff < 0 && diff >= -1) return t('studentEventDesk.yesterday');
   return '';
 }
 
 export default function ParentEventsScreen() {
   const router = useRouter();
   const { theme, isDark } = useTheme();
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language?.startsWith('te') ? 'te-IN' : 'en-IN';
   const { student } = useAuth() as any;
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -99,15 +111,15 @@ export default function ParentEventsScreen() {
     <ScreenLayout>
       <View style={styles.root}>
         <StudentSubpageHeader
-          title="School Events"
-          subtitle="Trips, celebrations, and campus days"
+          title={t('studentEventDesk.title')}
+          subtitle={t('studentEventDesk.subtitle')}
           onBack={() => router.back()}
         />
 
         <View style={styles.filters}>
           {([
-            { key: 'upcoming' as Filter, label: 'Upcoming', count: upcomingCount },
-            { key: 'all' as Filter, label: 'All events', count: events.length },
+            { key: 'upcoming' as Filter, label: t('studentEventDesk.upcoming'), count: upcomingCount },
+            { key: 'all' as Filter, label: t('studentEventDesk.allEvents'), count: events.length },
           ]).map((tab) => {
             const on = filter === tab.key;
             return (
@@ -133,7 +145,7 @@ export default function ParentEventsScreen() {
         {loading ? (
           <View style={styles.loader}>
             <LogoLoader size={72} />
-            <Text style={styles.loaderLabel}>Finding events for you…</Text>
+            <Text style={styles.loaderLabel}>{t('studentEventDesk.finding')}</Text>
           </View>
         ) : (
           <ScrollView
@@ -146,22 +158,31 @@ export default function ParentEventsScreen() {
             {visible.length === 0 ? (
               <Animated.View entering={FadeIn.duration(280)} style={styles.empty}>
                 <View style={styles.emptyIcon}>
-                  <Ionicons name="calendar-outline" size={30} color={theme.colors.primary} />
+                  <Ionicons name="sparkles-outline" size={30} color={theme.colors.primary} />
                 </View>
                 <Text style={styles.emptyTitle}>
-                  {filter === 'upcoming' ? 'Nothing on the calendar yet' : 'No published events'}
+                  {filter === 'upcoming' ? t('studentEventDesk.emptyUpcoming') : t('studentEventDesk.emptyAll')}
                 </Text>
                 <Text style={styles.emptyCopy}>
-                  {filter === 'upcoming'
-                    ? 'Upcoming school events, trips, and celebrations will show up here as soon as they are published.'
-                    : 'When the school publishes an event, you’ll see date, venue, and any consent or pass details here.'}
+                  {filter === 'upcoming' ? t('studentEventDesk.emptyUpcomingCopy') : t('studentEventDesk.emptyAllCopy')}
                 </Text>
+                <TouchableOpacity
+                  style={styles.emptyAction}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    router.push('/Screen/calendar' as any);
+                  }}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="calendar-outline" size={16} color="#FFFFFF" />
+                  <Text style={styles.emptyActionText}>{t('studentEventDesk.openCalendar')}</Text>
+                </TouchableOpacity>
               </Animated.View>
             ) : (
               visible.map((ev, index) => {
                 const type = getEventTypeConfig(ev.event_type || ev.category);
-                const status = statusMeta(ev.status);
-                const when = countdown(ev.start_date);
+                const status = statusMeta(ev.status, isDark, t);
+                const when = countdown(ev.start_date, t);
                 return (
                   <Animated.View key={ev.id} entering={FadeInDown.delay(Math.min(index, 6) * 40).duration(260)}>
                     <TouchableOpacity
@@ -192,12 +213,14 @@ export default function ParentEventsScreen() {
                           <Ionicons name="chevron-forward" size={16} color={theme.colors.textMuted} />
                         </View>
                         <Text style={styles.cardMeta} numberOfLines={1}>
-                          {formatEventDateRange(ev.start_date, ev.end_date, ev.is_all_day)}
-                          {ev.location ? `  ·  ${ev.location}` : '  ·  Campus'}
+                          {formatEventDateRange(ev.start_date, ev.end_date, ev.is_all_day, undefined, undefined, locale)}
+                          {ev.location ? `  ·  ${ev.location}` : `  ·  ${t('studentEventDesk.campus')}`}
                         </Text>
                         <View style={styles.chipRow}>
                           <View style={[styles.typeChip, { backgroundColor: isDark ? type.bgDark : type.bgLight }]}>
-                            <Text style={[styles.typeChipText, { color: type.color }]}>{type.label}</Text>
+                            <Text style={[styles.typeChipText, { color: type.color }]}>
+                              {t(`studentCalendar.eventType.${ev.event_type || 'SCHOOL_EVENT'}`, type.label)}
+                            </Text>
                           </View>
                           <View style={[styles.statusChip, { backgroundColor: isDark ? `${status.color}22` : status.bg }]}>
                             <Text style={[styles.statusChipText, { color: status.color }]}>{status.label}</Text>
@@ -235,6 +258,9 @@ function createStyles(
       gap: 4,
       borderRadius: 16,
       backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(15,23,42,0.045)',
+      width: '92%',
+      maxWidth: 560,
+      alignSelf: 'center',
     },
     chip: {
       flex: 1,
@@ -262,7 +288,7 @@ function createStyles(
     countTextOn: { color: '#FFFFFF' },
     loader: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingBottom: 80, gap: 12 },
     loaderLabel: { fontSize: 13, fontWeight: '600', color: colors.textMuted },
-    list: { padding: 16, paddingBottom: 48, gap: 12, flexGrow: 1 },
+    list: { padding: 16, paddingBottom: 48, gap: 12, flexGrow: 1, width: '100%', maxWidth: 640, alignSelf: 'center' },
     empty: { alignItems: 'center', paddingTop: 72, paddingHorizontal: 28, gap: 8 },
     emptyIcon: {
       width: 72,
@@ -287,6 +313,17 @@ function createStyles(
       textAlign: 'center',
       maxWidth: 300,
     },
+    emptyAction: {
+      marginTop: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: colors.primary,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderRadius: 14,
+    },
+    emptyActionText: { color: '#FFFFFF', fontWeight: '800', fontSize: 13 },
     card: {
       ...clayCard(isDark, 'sm'),
       flexDirection: 'row',

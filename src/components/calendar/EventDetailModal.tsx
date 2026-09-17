@@ -8,6 +8,7 @@ import { clayCard } from '../../theme/clayStyles';
 import { CalendarEvent, calendarService } from '../../services/calendarService';
 import { PRIORITY_CONFIG, formatEventDateRange, formatEventTime, getEventTypeConfig } from './CalendarTheme';
 import { alertCompat } from '../../utils/crossPlatformAlert';
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   visible: boolean;
@@ -28,6 +29,8 @@ export const EventDetailModal: React.FC<Props> = ({
 }) => {
   const router = useRouter();
   const { theme, isDark } = useTheme();
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language?.startsWith('te') ? 'te-IN' : 'en-IN';
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const compact = width < 640;
@@ -36,9 +39,16 @@ export const EventDetailModal: React.FC<Props> = ({
   if (!event) return null;
 
   const typeConfig = getEventTypeConfig(event.event_type);
+  const typeLabel = t(`studentCalendar.eventType.${event.event_type || 'SCHOOL_EVENT'}`, typeConfig.label);
   const priorityConfig = PRIORITY_CONFIG[event.priority] || PRIORITY_CONFIG.NORMAL;
-  const dateStr = formatEventDateRange(event.start_date, event.end_date, event.all_day ?? event.is_all_day, event.start_time, event.end_time);
-  const timeStr = formatEventTime(event.all_day ?? event.is_all_day ?? true, event.start_time, event.end_time);
+  const dateStr = formatEventDateRange(event.start_date, event.end_date, event.all_day ?? event.is_all_day, event.start_time, event.end_time, locale);
+  const allDay = event.all_day ?? event.is_all_day ?? true;
+  const timeStr = allDay
+    ? t('studentCalendar.allDay')
+    : !event.start_time
+      ? t('studentCalendar.scheduleTbd')
+      : formatEventTime(false, event.start_time, event.end_time);
+  const displayTitle = locale.startsWith('te') && event.title_te ? event.title_te : event.title;
 
   const handlePublish = async () => {
     try {
@@ -151,7 +161,7 @@ export const EventDetailModal: React.FC<Props> = ({
                   style={{ marginRight: 6 }}
                 />
                 <Text style={[styles.typePillText, { color: typeConfig.color }]}>
-                  {typeConfig.label}
+                  {typeLabel}
                 </Text>
               </View>
 
@@ -162,7 +172,7 @@ export const EventDetailModal: React.FC<Props> = ({
                 ]}
               >
                 <Text style={[styles.priorityPillText, { color: priorityConfig.color }]}>
-                  {priorityConfig.label}
+                  {t(`studentCalendar.priority.${event.priority || 'NORMAL'}`, priorityConfig.label)}
                 </Text>
               </View>
 
@@ -174,7 +184,7 @@ export const EventDetailModal: React.FC<Props> = ({
 
               {event.status === 'CANCELLED' && (
                 <View style={styles.cancelledBadge}>
-                  <Text style={styles.cancelledBadgeText}>Cancelled</Text>
+                  <Text style={styles.cancelledBadgeText}>{t('studentEventDesk.cancelled')}</Text>
                 </View>
               )}
             </View>
@@ -190,9 +200,11 @@ export const EventDetailModal: React.FC<Props> = ({
 
           <ScrollView style={styles.bodyScroll} showsVerticalScrollIndicator={false}>
             {/* Titles */}
-            <Text style={styles.title}>{event.title}</Text>
-            {event.title_te ? (
-              <Text style={styles.titleTelugu}>{event.title_te}</Text>
+            <Text style={styles.title}>{displayTitle}</Text>
+            {event.title_te && event.title && event.title_te !== event.title ? (
+              <Text style={styles.titleTelugu}>
+                {displayTitle === event.title_te ? event.title : event.title_te}
+              </Text>
             ) : null}
 
             {/* Date & Time Block */}
@@ -202,7 +214,7 @@ export const EventDetailModal: React.FC<Props> = ({
                   <Ionicons name="calendar-outline" size={16} color="#4F46E5" />
                 </View>
                 <View style={styles.infoContent}>
-                  <Text style={styles.infoLabel}>Date</Text>
+                  <Text style={styles.infoLabel}>{t('studentCalendar.date')}</Text>
                   <Text style={styles.infoValue}>{dateStr}</Text>
                 </View>
               </View>
@@ -212,7 +224,7 @@ export const EventDetailModal: React.FC<Props> = ({
                   <Ionicons name="time-outline" size={16} color="#4F46E5" />
                 </View>
                 <View style={styles.infoContent}>
-                  <Text style={styles.infoLabel}>Time</Text>
+                  <Text style={styles.infoLabel}>{t('studentCalendar.time')}</Text>
                   <Text style={styles.infoValue}>{timeStr}</Text>
                 </View>
               </View>
@@ -223,7 +235,7 @@ export const EventDetailModal: React.FC<Props> = ({
                     <Ionicons name="location-outline" size={16} color="#4F46E5" />
                   </View>
                   <View style={styles.infoContent}>
-                    <Text style={styles.infoLabel}>Location</Text>
+                    <Text style={styles.infoLabel}>{t('studentCalendar.location')}</Text>
                     <Text style={styles.infoValue}>{event.location}</Text>
                   </View>
                 </View>
@@ -233,7 +245,7 @@ export const EventDetailModal: React.FC<Props> = ({
             {/* Description */}
             {event.description ? (
               <View style={styles.descSection}>
-                <Text style={styles.sectionLabel}>Details</Text>
+                <Text style={styles.sectionLabel}>{t('studentCalendar.details')}</Text>
                 <Text style={styles.descText}>{event.description}</Text>
                 {event.description_te ? (
                   <Text style={styles.descTextTelugu}>{event.description_te}</Text>
@@ -266,13 +278,13 @@ export const EventDetailModal: React.FC<Props> = ({
 
             {/* Audience Targeting */}
             <View style={styles.targetSection}>
-              <Text style={styles.sectionLabel}>Target Audience</Text>
+              <Text style={styles.sectionLabel}>{t('studentCalendar.targetAudience')}</Text>
               <View style={styles.targetPill}>
                 <Ionicons name="people-outline" size={14} color={isDark ? '#94A3B8' : '#475569'} />
                 <Text style={styles.targetPillText}>
                   {event.target_type === 'ENTIRE_SCHOOL'
-                    ? 'Entire School Community'
-                    : `${event.target_type}: ${event.targets?.map((t) => t.target_name || t.target_id).join(', ') || 'Assigned Groups'}`}
+                    ? t('studentCalendar.wholeSchool')
+                    : `${event.target_type}: ${event.targets?.map((item) => item.target_name || item.target_id).join(', ') || t('studentCalendar.wholeSchool')}`}
                 </Text>
               </View>
             </View>
@@ -300,7 +312,7 @@ export const EventDetailModal: React.FC<Props> = ({
               activeOpacity={0.7}
             >
               <Ionicons name="calendar" size={16} color={theme.colors.text} />
-              <Text style={styles.deviceSyncText}>Add to Calendar</Text>
+              <Text style={styles.deviceSyncText}>{t('studentCalendar.addToCalendar')}</Text>
             </TouchableOpacity>
 
             {isAdmin && event.status === 'DRAFT' && (
