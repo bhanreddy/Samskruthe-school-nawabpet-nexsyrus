@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "The Global School Ravulpally",
-    "slug": "theglobalschoolravulpally",
-    "version": "3.1.2",
+    "name": "Samskruthe School Nawabpet",
+    "slug": "samskrutheschoolnawabpet",
+    "version": "5.1.8",
     "platforms": [
       "android",
       "ios",
@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "requireFullScreen": false,
-      "bundleIdentifier": "com.nexsyrussims.theglobalschoolravulpally",
+      "bundleIdentifier": "com.nexsyrussims.samskrutheschool",
       "buildNumber": "1",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
@@ -31,7 +31,7 @@
       }
     },
     "android": {
-      "package": "com.nexsyrussims.theglobalschoolravulpally",
+      "package": "com.nexsyrussims.samskrutheschool",
       "jsEngine": "hermes",
       "versionCode": 1,
       "googleServicesFile": "./google-services.json",
@@ -39,7 +39,7 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/icon-v2.png",
         "backgroundColor": "#E6F4FE",
-        "monochromeImage": "./assets/images/icon-v2.png"
+        "monochromeImage": "./assets/images/icon.png"
       },
       "useNextNotificationsApi": true,
       "permissions": [
@@ -51,12 +51,8 @@
         "RECEIVE_BOOT_COMPLETED"
       ]
     },
-    "web": {
-      "bundler": "metro",
-      "favicon": "./assets/images/icon.png"
-    },
     "notification": {
-      "icon": "./assets/images/icon-v2.png",
+      "icon": "./assets/images/icon.png",
       "color": "#3535A8"
     },
     "plugins": [
@@ -119,7 +115,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "dea90aa8-3fd0-45b6-9ab0-9e9a46f5fc97"
+        "projectId": "06802539-5f1f-4aa9-abd9-17350b5e65a7"
       }
     },
     "owner": "nexsyrus"
